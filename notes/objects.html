@@ -1,0 +1,708 @@
+<!doctype html>
+<html class="no-js" lang="en">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark">
+<meta property="og:title" content="Objects in Vineyard" />
+  
+<meta property="og:type" content="website" />
+  
+<meta property="og:url" content="notes/objects.html" />
+  
+<meta property="og:description" content="Vineyard represents all kinds of data as vineyard objects. Vineyard adopts a metadata-payloads decoupled design and an object in vineyard consists of two folds: A set of blobs where the payload of ..." />
+  <link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="I/O Driver" href="io-drivers.html" /><link rel="prev" title="Architecture" href="architecture.html" />
+
+    <link rel="shortcut icon" href="../_static/vineyard.ico"/><meta name="generator" content="sphinx-5.0.2, furo 2022.06.21"/>
+        <title>Objects in Vineyard - Vineyard</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?digest=40978830699223671f4072448e654b5958f38b89" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/panels-bootstrap.5fd3999ee7762ccc51105388f4a9d115.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/panels-variables.06eb56fa6e07937060861dad626602ad.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?digest=30d1aed668e5c3a91c3e3bf6a60b675221979f0e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/brands.min.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/v4-shims.min.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/panels.css" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f8f8f8;
+  --color-code-foreground: black;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-half" viewBox="0 0 24 24">
+    <title>Auto light/dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-shadow">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M13 12h5" />
+      <path d="M13 15h4" />
+      <path d="M13 18h1" />
+      <path d="M13 9h4" />
+      <path d="M13 6h1" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">Vineyard</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto"><use href="#svg-sun-half"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand centered" href="../index.html">
+  
+  <div class="sidebar-logo-container">
+    <img class="sidebar-logo" src="../_static/vineyard-logo-h.png" alt="Logo"/>
+  </div>
+  
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder=Search name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting Started</a></li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../user-guide.html">User Guide</a><input checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><div class="visually-hidden">Toggle child pages in navigation</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Objects in Vineyard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="io-drivers.html">I/O Driver</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../tutorials.html">Tutorials</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><div class="visually-hidden">Toggle child pages in navigation</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/distributed-learning.html">Distributed Learning with Vineyard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/adding-custom-datatypes-cpp.html">Adding Custom Data Types in C++</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../integrations.html">Integrations</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><div class="visually-hidden">Toggle child pages in navigation</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="dask.html">Dask on Vineyard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ml.html">Machine Learning with Vineyard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="airflow.html">Airflow on Vineyard</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Deployment</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../deployment.html">Deployment</a><input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><div class="visually-hidden">Toggle child pages in navigation</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="deploy-locally.html">Deploying on Linux/MacOS</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deploy-docker.html">Deploying using Docker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="deploy-kubernetes.html">Deploying on Kubernetes</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api-reference.html">API Reference</a><input class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><div class="visually-hidden">Toggle child pages in navigation</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="python-api.html">Python API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cpp-api.html">C++ API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="ctl.html">Vineyard Cli</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Community</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../community.html">Join the Community</a><input class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><div class="visually-hidden">Toggle child pages in navigation</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="contributing.html">Contributing to vineyard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="faq.html">Frequently Asked Questions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="roadmap.html">Roadmap</a></li>
+</ul>
+</li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/v6d-io/v6d/edit/main/docs/notes/objects.rst" title="Edit this page">
+    <svg aria-hidden="true" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+      <path d="M4 20h4l10.5 -10.5a1.5 1.5 0 0 0 -4 -4l-10.5 10.5v4" />
+      <line x1="13.5" y1="6.5" x2="17.5" y2="10.5" />
+    </svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto"><use href="#svg-sun-half"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main">
+          <div class="section" id="objects-in-vineyard">
+<h1>Objects in Vineyard<a class="headerlink" href="#objects-in-vineyard" title="Permalink to this heading">#</a></h1>
+<p>Vineyard represents all kinds of data as vineyard objects. Vineyard adopts a
+metadata-payloads decoupled design and an object in vineyard consists of two folds:</p>
+<ol class="arabic simple">
+<li><p>A set of blobs where the payload of the data lives in;</p></li>
+<li><p>A hierarchical meta tree which describes the type, layout and properties of the data.</p></li>
+</ol>
+<div class="section" id="metadata-and-payloads">
+<h2>Metadata and payloads<a class="headerlink" href="#metadata-and-payloads" title="Permalink to this heading">#</a></h2>
+<p>There are some examples that explain the basic idea of metadata and payload that
+forms vineyard objects:</p>
+<ul class="simple">
+<li><p>Blob: A blob is a pointer with a length that describes the size of the data,</p>
+<ul>
+<li><p>metadata:</p>
+<ul>
+<li><p><code class="code docutils literal notranslate"><span class="pre">length</span></code></p></li>
+</ul>
+</li>
+<li><p>payloads:</p>
+<ul>
+<li><p><code class="code docutils literal notranslate"><span class="pre">pointer</span></code>, the actual payload of the blob</p></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>Tensor: A tensor can be viewed as a blob that contains the actual data and several
+metadata entries that describe the shape and type information,</p>
+<ul>
+<li><p>metadata:</p>
+<ul>
+<li><p><code class="code docutils literal notranslate"><span class="pre">shape</span></code></p></li>
+<li><p><code class="code docutils literal notranslate"><span class="pre">dtype</span></code></p></li>
+<li><p><code class="code docutils literal notranslate"><span class="pre">data</span></code>, a member with type <code class="code docutils literal notranslate"><span class="pre">Blob</span></code></p></li>
+</ul>
+</li>
+<li><p>payloads:</p>
+<ul>
+<li><p><code class="code docutils literal notranslate"><span class="pre">pointer</span></code> in the member <code class="code docutils literal notranslate"><span class="pre">data</span></code></p></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>Dataframe: A dataframe is an ordered collection of tensors as its columns and each
+column has a unique name,</p>
+<ul>
+<li><p>metadata:</p>
+<ul>
+<li><p><code class="code docutils literal notranslate"><span class="pre">column_size</span></code></p></li>
+<li><p><code class="code docutils literal notranslate"><span class="pre">names</span></code>, a list of members with type <code class="code docutils literal notranslate"><span class="pre">string</span></code></p></li>
+<li><p><code class="code docutils literal notranslate"><span class="pre">columns</span></code>, a list of member with type <code class="code docutils literal notranslate"><span class="pre">Tensor</span></code></p></li>
+</ul>
+</li>
+<li><p>payloads:</p>
+<ul>
+<li><p>a set of <code class="code docutils literal notranslate"><span class="pre">pointer</span></code> in the member <code class="code docutils literal notranslate"><span class="pre">columns</span></code> (the member <code class="code docutils literal notranslate"><span class="pre">data</span></code> of
+of those :code:<a href="#id1"><span class="problematic" id="id2">`</span></a>Tensor`s)</p></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p>From the example above you could see that the objects naturally fit a hierarchical
+model and complex data objects can be composed from some simpler objects. Each object
+contains a set of blobs as the payload, and a metadata (in tree form) that describes
+the semantic and organizations of those blobs.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Without the metadata, the blob set is just some memory pieces that have no
+meaningful explanation.</p>
+</div>
+</div>
+<div class="section" id="decoupled-design">
+<h2>Decoupled design<a class="headerlink" href="#decoupled-design" title="Permalink to this heading">#</a></h2>
+<p>The decoupling design of data payload and data layout above brings three benefits:</p>
+<ol class="arabic simple">
+<li><p>The payload is stored locally in each vineyard instance, while the meta data is shared
+among all the vineyard instances across the cluster. This significantly reduces the costs
+to keep the distributed data consistent.</p></li>
+<li><p>It makes vineyard objects self-interpreted, since the meta data fully determines how
+the object should be resolved. This not only brings the consistency in semantics when
+sharing vineyard objects between different systems and different programming languages,
+but also allows users to store complex data structures in high-level abstraction, such
+as graphs in CSR model directly in vineyard, without serializing/deserializing
+the object every time saving/loading it from vineyard.</p></li>
+<li><p>It facilitates the exploiting of data-aware scheduling techniques, e.g., when we process
+a graph in vineyard, we can easily access the meta tree of the graph to see how large each
+partitioned fragment is without touching the real vertices and edges of the graph, as such,
+we can assign precise amount of computation resources for each fragment to achieve overall
+performance enhancement.</p></li>
+</ol>
+<p>In particular, for the meta data and methods of vineyard objects, vineyard employs two
+design choices:</p>
+<ol class="arabic simple">
+<li><p>The composable design on vineyard objects to
+facilitate distributed data management;</p></li>
+<li><p>The extensible design on methods of vineyard objects to enable flexible data sharing
+between different computation systems with nearly zero extra development cost.</p></li>
+</ol>
+</div>
+<div class="section" id="design-space-of-objects">
+<h2>Design space of objects<a class="headerlink" href="#design-space-of-objects" title="Permalink to this heading">#</a></h2>
+<div class="section" id="composable-design">
+<h3>Composable design<a class="headerlink" href="#composable-design" title="Permalink to this heading">#</a></h3>
+<p>The composition mechanism applies as the hierarchical tree structure
+of the meta data of vineyard objects. The root meta data of a complex object
+stores the links to the root meta data of its components, and by traversing the
+links recursively, a complete meta tree is produced for the complex object.</p>
+<p>For example, a distributed graph is composed of partitioned graph fragments, while
+a graph fragment is composed of vertices and edges within that fragment. Recall
+the decoupling design of payload and layout of vineyard objects, in a graph fragment,
+the vertices and edges within the fragment is stored locally in the corresponding
+vineyard instance for the partition, meanwhile, the meta data (e.g., partition index,
+number of vertices, and number of edges) are stored in the backend key-value store.</p>
+<p>To save a distributed graph, we first save the partitioned fragments in each
+vineyard instance, and share their meta data in the backend key-value store, and
+then we can create the distributed graph by creating the root meta data that
+contains the links to the root meta data of the fragments in an efficient fashion.</p>
+</div>
+<div class="section" id="distributed-object">
+<h3>Distributed object<a class="headerlink" href="#distributed-object" title="Permalink to this heading">#</a></h3>
+<p>Vineyard supports store very large objects across many nodes in a cluster and allows
+user programs to treat those as a whole. Data are shaded to many machines and no
+replication happens.</p>
+<p>Taking <code class="docutils literal notranslate"><span class="pre">DataFrame</span></code> as an example, in real world cases the table may consists
+billions of rows and cannot be fit into a single machine. Under such conditions,
+the dataframe could be split along the index axis or column axis and every vineyard
+node holds a subset of chunks. Vineyard still provides a <em>logical view</em> about the
+complete dataframe and allows distributed computation engines like Mars and GraphScope
+to process such data structures as a whole.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>See also the concepts of <em>persistent objects</em> in the following subsection.</p>
+</div>
+</div>
+<div class="section" id="transient-vs-persistent-objects">
+<h3>Transient vs. persistent objects<a class="headerlink" href="#transient-vs-persistent-objects" title="Permalink to this heading">#</a></h3>
+<p>As described above, the metadata and payloads of vineyard objects are decomposed
+and managed by different components of vineyard server. The payloads are designed
+to be shared with computing engines using memory mapping locally. However, the
+metadata can be inspected by clients that connected to other vineyardd instances,
+e.g., when forming a distributed object, the distributed object consists of a set
+of chunks that placed on different vineyardd instances. When getting the distributed
+objects from vineyard, the computing engines may need to inspect the metadata of
+non-local pieces to obtain a sense of the distribution of whole dataset.</p>
+<p>Such a requirements means that the metadata needs to be globally synchronized and
+can be accessed from clients that connects to other vineyardd instances. However,
+global synchronization is a costly operation and many tiny key-value pairs would
+dramatically increasing and burden of the key-value store backend of our metadata
+services. Thus we separate objects as the transient objects and persistent objects.</p>
+<ul class="simple">
+<li><p><em>Transient objects</em> are designed for cases where the object is known that won’t
+be part of a distributed objects and never need to be inspected by clients on
+other vineyardd instances. Short-live immediate value inside the progress of a
+single computing engines is a common scenario that transient objects can help.</p></li>
+<li><p><em>Persistent objects</em> are designed for cases where the object chunk will be used
+to form a larger distributed object and the metadata is needed when applications
+inspect the distributed object. Intermediate data among two distributed engines
+is a common scenario that persistent objects and distributed objects are needed
+to pass the intermediate data between two distributed engines.</p></li>
+</ul>
+<div class="admonition caution">
+<p class="admonition-title">Caution</p>
+<p>By default, objects are <strong>transient</strong> and we have an API <code class="code docutils literal notranslate"><span class="pre">client.persist()</span></code>
+that can explicitly persist the metadata of the target object to etcd and make
+sure it visible by clients that connected to other instances in the cluster.</p>
+</div>
+</div>
+<div class="section" id="extensible-builders-and-resolvers">
+<h3>Extensible builders and resolvers<a class="headerlink" href="#extensible-builders-and-resolvers" title="Permalink to this heading">#</a></h3>
+<p>Vineyard employs the extensible design concept of registry mechanism
+to facilitate users transplanting their data structures into vineyard.</p>
+<p>In particular, our extensible design on builders, resolvers and drivers,
+allows users to build, resolve and share their data structures easily
+through different systems and paradigms respectively, and the registry
+mechanism is so basic that even the core data structures and drivers in
+vineyard also follows the same design.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><strong>So what is the registry mechanism?</strong></p>
+<p>In general, the registry mechanism decouples the methods from the definition
+of vineyard data types. For builders and resolvers, it means users can
+flexibly register different implementations in different languages
+to build and resolve the same vineyard data type, which makes the data
+available to share between different systems and paradigms, and makes
+it possible to exploit native language optimizations.</p>
+<p>On the other hand, for drivers, the registry mechanism allows users
+to flexibly plug-in functionality methods in different languages for
+vineyard data types, which assigns required capability to the data types
+along with the data analytical process.</p>
+<p>Further more, the registered methods can be implemented and optimized
+in accordance with specific data analytical tasks for further efficiency
+augmentation.</p>
+</div>
+</div>
+</div>
+<div class="section" id="implementation-details">
+<h2>Implementation details<a class="headerlink" href="#implementation-details" title="Permalink to this heading">#</a></h2>
+<div class="section" id="vineyard-objects">
+<h3>Vineyard objects<a class="headerlink" href="#vineyard-objects" title="Permalink to this heading">#</a></h3>
+<p>As we mentioned before, for each object in vineyard, it consists of two
+parts:</p>
+<ol class="arabic simple">
+<li><p>The data payload stored in the corresponding vineyard instance locally</p></li>
+<li><p>The hierarchical meta data shared across the vineyard cluster</p></li>
+</ol>
+<p>In particualr, <code class="docutils literal notranslate"><span class="pre">Blob</span></code> is the unit where the data payload lives in a vineyard
+instance.
+A blob object holds a segment of memory in the bulk store of the vineyard
+instance, so that users can save their local buffer into a blob and
+get the blob later in another process in a zero-copy fashion through
+memory mapping.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">payload</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">&quot;Hello, World!&quot;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">blob_id</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">blob</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_object</span><span class="p">(</span><span class="n">blob_id</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">blob</span><span class="o">.</span><span class="n">typename</span><span class="p">,</span> <span class="n">blob</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">blob</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">vineyard::Blob 28 Object &lt;&quot;o800000011cfa7040&quot;: vineyard::Blob&gt;</span>
+</pre></div>
+</div>
+<p>On the other hand, the hierarchical meta data of vineyard objects are
+shared across the cluster. In the following example, for simplicity,
+we launch a vineyard cluster with
+two vineyard instances in the same machine, although in practice,
+these vineyard instances are launched distributively on each machine of the cluster.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>python3 -m vineyard --socket /var/run/vineyard.sock1
+<span class="gp">$ </span>python3 -m vineyard --socket /var/run/vineyard.sock2
+</pre></div>
+</div>
+<p>Then we can create a distributed pair of arrays in vineyard with the
+first array stored in the first vineyard instance which listens to ipc_socket
+<code class="docutils literal notranslate"><span class="pre">/var/run/vineyard.sock1</span></code>, and the second array stored in the second instance
+listening to ipc_socket <code class="docutils literal notranslate"><span class="pre">/var/run/vineyard.sock2</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">vineyard</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">vineyard.data.tensor</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># build the first array in the first vineyard instance</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client1</span> <span class="o">=</span> <span class="n">vineyard</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;/var/run/vineyard.sock1&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">id1</span> <span class="o">=</span> <span class="n">client1</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">8</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># persist the object to make it visible to form the global object</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="o">.</span><span class="n">persist</span><span class="p">(</span><span class="n">id1</span><span class="p">)</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># build the second array in the second vineyard instance</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client2</span> <span class="o">=</span> <span class="n">vineyard</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s1">&#39;/var/run/vineyard.sock2&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">id2</span> <span class="o">=</span> <span class="n">client2</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># persist the object to make it visible to form the global object</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client</span><span class="o">.</span><span class="n">persist</span><span class="p">(</span><span class="n">id2</span><span class="p">)</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># build the pair from client1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj1</span> <span class="o">=</span> <span class="n">client1</span><span class="o">.</span><span class="n">get_object</span><span class="p">(</span><span class="n">id1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj2</span> <span class="o">=</span> <span class="n">client2</span><span class="o">.</span><span class="n">get_object</span><span class="p">(</span><span class="n">id2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">id_pair</span> <span class="o">=</span> <span class="n">client1</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">obj1</span><span class="p">,</span> <span class="n">obj2</span><span class="p">))</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># get the pair object from client2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj_pair</span> <span class="o">=</span> <span class="n">client2</span><span class="o">.</span><span class="n">get_object</span><span class="p">(</span><span class="n">id_pair</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">obj_pair</span><span class="o">.</span><span class="n">first</span><span class="o">.</span><span class="n">typename</span><span class="p">,</span> <span class="n">obj_pair</span><span class="o">.</span><span class="n">first</span><span class="o">.</span><span class="n">size</span><span class="p">(),</span> <span class="n">obj_pair</span><span class="o">.</span><span class="n">second</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
+</pre></div>
+</div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">vineyard::Array 8 4</span>
+</pre></div>
+</div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">&gt;&gt;&gt; # get the pair value from client2</span>
+<span class="go">&gt;&gt;&gt; value_pair = client2.get(id_pair)</span>
+<span class="go">&gt;&gt;&gt; print(value_pair)</span>
+</pre></div>
+</div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp gp-VirtualEnv">(None, [1, 1, 1, 1])</span>
+</pre></div>
+</div>
+<p>Here we can get the meta data of the pair object from <code class="docutils literal notranslate"><span class="pre">client2</span></code>
+though <code class="docutils literal notranslate"><span class="pre">client1</span></code> created it, but we can’t get the payload of the
+first element of the pair from <code class="docutils literal notranslate"><span class="pre">client2</span></code>, since it is stored locally
+in the first vineyard instance.</p>
+</div>
+<div class="section" id="builder-and-resolver">
+<span id="divein-builder-resolver"></span><h3>Builder and resolver<a class="headerlink" href="#builder-and-resolver" title="Permalink to this heading">#</a></h3>
+<p>As we shown above, vineyard allows users to register builders/resolvers to build/resolve
+vineyard objects from/to the data types in the client side based on the computation
+requirements.</p>
+<p>Suppose <code class="docutils literal notranslate"><span class="pre">pyarrow</span></code> types are employed in the context, then we can define the builder and
+resolver between <code class="docutils literal notranslate"><span class="pre">vineyard::NumericArray</span></code> and <code class="docutils literal notranslate"><span class="pre">pyarrow.NumericArray</span></code> as follows:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">numeric_array_builder</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">array</span><span class="p">,</span> <span class="n">builder</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">meta</span> <span class="o">=</span> <span class="n">ObjectMeta</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">meta</span><span class="p">[</span><span class="s1">&#39;typename&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;vineyard::NumericArray&lt;</span><span class="si">%s</span><span class="s1">&gt;&#39;</span> <span class="o">%</span> <span class="n">array</span><span class="o">.</span><span class="n">type</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">meta</span><span class="p">[</span><span class="s1">&#39;length_&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">meta</span><span class="p">[</span><span class="s1">&#39;null_count_&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">null_count</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">meta</span><span class="p">[</span><span class="s1">&#39;offset_&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">offset</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">null_bitmap</span> <span class="o">=</span> <span class="n">buffer_builder</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">array</span><span class="o">.</span><span class="n">buffers</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span> <span class="n">builder</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">buffer</span> <span class="o">=</span> <span class="n">buffer_builder</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">array</span><span class="o">.</span><span class="n">buffers</span><span class="p">()[</span><span class="mi">1</span><span class="p">],</span> <span class="n">builder</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">meta</span><span class="o">.</span><span class="n">add_member</span><span class="p">(</span><span class="s1">&#39;buffer_&#39;</span><span class="p">,</span> <span class="n">buffer</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">meta</span><span class="o">.</span><span class="n">add_member</span><span class="p">(</span><span class="s1">&#39;null_bitmap_&#39;</span><span class="p">,</span> <span class="n">null_bitmap</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">meta</span><span class="p">[</span><span class="s1">&#39;nbytes&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">nbytes</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">return</span> <span class="n">client</span><span class="o">.</span><span class="n">create_metadata</span><span class="p">(</span><span class="n">meta</span><span class="p">)</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">numeric_array_resolver</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">meta</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">meta</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">typename</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">typename</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">value_type</span> <span class="o">=</span> <span class="n">normalize_dtype</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;vineyard::NumericArray&lt;([^&gt;]+)&gt;&#39;</span><span class="p">,</span> <span class="n">typename</span><span class="p">)</span><span class="o">.</span><span class="n">groups</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">dtype</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">from_numpy_dtype</span><span class="p">(</span><span class="n">value_type</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">buffer</span> <span class="o">=</span> <span class="n">as_arrow_buffer</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">member</span><span class="p">(</span><span class="s1">&#39;buffer_&#39;</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">null_bitmap</span> <span class="o">=</span> <span class="n">as_arrow_buffer</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">member</span><span class="p">(</span><span class="s1">&#39;null_bitmap_&#39;</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">length</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;length_&#39;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">null_count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;null_count_&#39;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">offset</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s1">&#39;offset_&#39;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">Array</span><span class="o">.</span><span class="n">from_buffers</span><span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="p">[</span><span class="n">null_bitmap</span><span class="p">,</span> <span class="n">buffer</span><span class="p">],</span> <span class="n">null_count</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Finally, we register the builder and resolver for automatic building and resolving:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">builder_ctx</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">NumericArray</span><span class="p">,</span> <span class="n">numeric_array_builder</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">resolver_ctx</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;vineyard::NumericArray&#39;</span><span class="p">,</span> <span class="n">numeric_array_resolver</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>There are cases where we have more than one resolvers or builders for a certain type,
+e.g., the <code class="code docutils literal notranslate"><span class="pre">vineyard::Tensor</span></code> object can be resolved as <code class="code docutils literal notranslate"><span class="pre">numpy.ndarray</span></code> or
+<code class="code docutils literal notranslate"><span class="pre">xgboost::DMatrix</span></code>. We could have</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">numpy_resolver</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+    <span class="o">...</span>
+
+<span class="n">default_resolver_context</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;vineyard::Tensor&#39;</span><span class="p">,</span> <span class="n">numpy_resolver</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>and</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">xgboost_resolver</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+    <span class="o">...</span>
+
+<span class="n">default_resolver_context</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s1">&#39;vineyard::Tensor&#39;</span><span class="p">,</span> <span class="n">xgboost_resolver</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>at the same time. The stackable <code class="code docutils literal notranslate"><span class="pre">resolver_context</span></code> could help there,</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">resolver_context</span><span class="p">({</span><span class="s1">&#39;vineyard::Tensor&#39;</span><span class="p">,</span> <span class="n">xgboost_resolver</span><span class="p">}):</span>
+    <span class="o">...</span>
+</pre></div>
+</div>
+<p>Assuming the default context resolves <code class="code docutils literal notranslate"><span class="pre">vineyard::Tensor</span></code> to <code class="code docutils literal notranslate"><span class="pre">numpy.ndarray</span></code>,
+inside the <code class="code docutils literal notranslate"><span class="pre">with</span> <span class="pre">resolver_context</span></code> the <code class="code docutils literal notranslate"><span class="pre">vineyard::Tensor</span></code> will be resolved
+to <code class="code docutils literal notranslate"><span class="pre">xgboost::DMatrix</span></code>, and after exiting the context the global environment
+will be restored back as default.</p>
+<p>The <code class="code docutils literal notranslate"><span class="pre">with</span> <span class="pre">resolver_context</span></code> is nestable as well.</p>
+</div>
+</div>
+</div>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="io-drivers.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">I/O Driver</div>
+              </div>
+              <svg><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="architecture.html">
+              <svg><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Architecture</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2019-2022, The Vineyard Authors
+            </div>
+            Made with 
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa fa-solid fa-github fa-2x" href="https://github.com/v6d-io/v6d" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            Contents
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Objects in Vineyard</a><ul>
+<li><a class="reference internal" href="#metadata-and-payloads">Metadata and payloads</a></li>
+<li><a class="reference internal" href="#decoupled-design">Decoupled design</a></li>
+<li><a class="reference internal" href="#design-space-of-objects">Design space of objects</a><ul>
+<li><a class="reference internal" href="#composable-design">Composable design</a></li>
+<li><a class="reference internal" href="#distributed-object">Distributed object</a></li>
+<li><a class="reference internal" href="#transient-vs-persistent-objects">Transient vs. persistent objects</a></li>
+<li><a class="reference internal" href="#extensible-builders-and-resolvers">Extensible builders and resolvers</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#implementation-details">Implementation details</a><ul>
+<li><a class="reference internal" href="#vineyard-objects">Vineyard objects</a></li>
+<li><a class="reference internal" href="#builder-and-resolver">Builder and resolver</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="../_static/scripts/furo.js"></script>
+    <script src="../_static/clipboard.min.js"></script>
+    <script src="../_static/copybutton.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    </body>
+</html>
