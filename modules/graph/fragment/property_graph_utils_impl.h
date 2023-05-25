@@ -23,6 +23,7 @@ limitations under the License.
 #include "graph/fragment/property_graph_types.h"
 #include "graph/fragment/property_graph_utils.h"
 #include "graph/fragment/varint_impl.h"
+#include "graph/fragment/GroupVarint.h"
 
 namespace vineyard {
 
@@ -697,23 +698,47 @@ boost::leaf::result<void> generate_varint_edges(
   parallel_for(static_cast<size_t>(0), e_offsets_lists_size - 1,
                [&e_list, &e_offsets_lists_, &encoded_id_sub_lists](int64_t k) {
                   VID_T pre_vid = 0;
-                  encoded_id_sub_lists[k].resize(9 * (e_offsets_lists_[k + 1] - e_offsets_lists_[k]));
-                  encoded_id_sub_lists[k].resize(0);
+                  std::string s;
+                  folly::GroupVarintEncoder<uint64_t, folly::StringAppender> encoder(s);
+                  // encoded_id_sub_lists[k].reverse(9 * (e_offsets_lists_[k + 1] - e_offsets_lists_[k]));
+                  // encoded_id_sub_lists[k].resize(0);
                   for (int64_t count = e_offsets_lists_[k];
                       count < e_offsets_lists_[k + 1];
                       count++) {
-                   varint_encode(e_list[count].vid - pre_vid, encoded_id_sub_lists[k]);
-                   varint_encode(e_list[count].eid, encoded_id_sub_lists[k]);
+                  //  varint_encode(e_list[count].vid - pre_vid, encoded_id_sub_lists[k]);
+                  //  varint_encode(e_list[count].eid, encoded_id_sub_lists[k]);
+                  encoder.add(e_list[count].vid - pre_vid);
+                  encoder.add(e_list[count].eid);
+                  LOG(INFO) << "eid " << e_list[count].eid << " vid " << e_list[count].vid - pre_vid;
 
                    pre_vid = e_list[count].vid;
                  }
+                 encoder.finish();
+                 encoded_id_sub_lists[k].resize(s.size());
+                 memcpy(encoded_id_sub_lists[k].data(), s.data(), s.size());
+                 LOG(INFO) << "====compact====";
+                  for (int i = 0; i < s.size(); i++) {
+                    LOG(INFO) << std::hex << (int)s[i];
+                  }
+                  LOG(INFO) << "====compact====";
+                 folly::GroupVarint64Decoder decoder(s);
+                 for (int i = 0; i < e_offsets_lists_[k+1] - e_offsets_lists_[k]; i++) {
+                  uint64_t temp;
+                  decoder.next(&temp);
+                  LOG(INFO) << temp;
+                  decoder.next(&temp);
+                  LOG(INFO) << temp;
+                 }
                },
-               concurrency);
+               1);
 
+  LOG(INFO) << "======";
   encoded_offsets_list[0] = 0;
   for (size_t i = 0; i < encoded_id_sub_lists.size(); i++) {
     encoded_offsets_list[i + 1] = encoded_offsets_list[i] + encoded_id_sub_lists[i].size();
+    LOG(INFO) << encoded_offsets_list[i+1];
   }
+  LOG(INFO) << "======";
 
   encoded_id_list.resize(encoded_offsets_list[e_offsets_lists_size - 1]);
   parallel_for(static_cast<size_t>(0), encoded_id_sub_lists.size(),

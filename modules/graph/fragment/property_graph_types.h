@@ -27,6 +27,7 @@ limitations under the License.
 #include "basic/ds/arrow.h"
 #include "common/util/arrow.h"
 #include "graph/fragment/varint_impl.h"
+#include "graph/fragment/GroupVarint.h"
 
 namespace vineyard {
 
@@ -525,8 +526,18 @@ struct EncodedNbr {
       : ptr_(ptr), edata_arrays_(edata_arrays) {
     data_.eid = 0;
     data_.vid = 0;
-    if (capacity > 0)
+    LOG(INFO) << "capacity: " << capacity;
+    if (capacity > 0) {
+      s_.resize(capacity);
+      size_ = capacity;
+      memcpy(s_.data(), ptr_, capacity);
+      LOG(INFO) << "origin ptr:" << (uint64_t)ptr_;
+      for (int i = 0; i < capacity; i++) {
+        LOG(INFO) << std::hex << (int)s_[i];
+      }
+      decoder_ = folly::GroupVarint64Decoder(s_);
       decode();
+    }
   }
 
   EncodedNbr& operator=(const EncodedNbr& rhs) {
@@ -546,14 +557,25 @@ struct EncodedNbr {
   }
 
   inline void decode() const {
-    eid_t eid;
-    vid_t vid;
+    uint64_t eid, vid;
     size_t e_size, v_size;
-    v_size = varint_decode(ptr_, vid);
-    e_size = varint_decode(ptr_ + v_size, eid);
-    data_.vid += vid;
-    data_.eid = eid;
-    size_ = v_size + e_size;
+    // v_size = varint_decode(ptr_, vid);
+    // e_size = varint_decode(ptr_ + v_size, eid);
+    if (!decoder_.next(&vid)) {
+      ptr_ += size_;
+      return;
+    }
+    
+    decoder_.next(&eid);
+
+
+    data_.vid += static_cast<vid_t>(vid);
+    data_.eid = static_cast<eid_t>(eid);
+    if(switch_ < 20) {
+      LOG(INFO) << "size:" << size_;
+      LOG(INFO) << "vid:" << data_.vid << " eid:" << data_.eid;
+      switch_++;
+    }
   }
 
   grape::Vertex<VID_T> neighbor() const {
@@ -584,12 +606,16 @@ struct EncodedNbr {
   }
 
   inline const EncodedNbr& operator++() const {
-    ptr_ += size_;
     /*
      * This may cause the program to crash due to out-of-bounds access.
      * Currently, this part is controlled by iterators. The default user access
      * behavior will not be out of bounds.
      */
+    // ptr_ += size_;
+    // if(switch_ < 10) {
+    //   LOG(INFO) << "ptr_" << (uint64_t)ptr_;
+    // }
+    
     decode();
     return *this;
   }
@@ -624,8 +650,12 @@ struct EncodedNbr {
 
  private:
   const mutable uint8_t* ptr_;
+  mutable std::string s_;
+
+  mutable folly::GroupVarintDecoder<uint64_t> decoder_;
   mutable NbrUnit<VID_T, EID_T> data_;
   mutable size_t size_;
+  mutable int switch_ = 0;
 
   const void** edata_arrays_;
 };
