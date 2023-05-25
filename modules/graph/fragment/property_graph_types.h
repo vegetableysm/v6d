@@ -514,25 +514,25 @@ struct EncodedNbr {
   EncodedNbr(const EncodedNbr& rhs)
       : ptr_(rhs.ptr_),
         data_(rhs.data_),
-        size_(rhs.size()),
+        offset_(rhs.offset_),
         edata_arrays_(rhs.edata_arrays_) {}
   EncodedNbr(EncodedNbr&& rhs)
       : ptr_(std::move(rhs.ptr_)),
         data_(rhs.data_),
-        size_(rhs.size()),
+        offset_(rhs.offset_),
         edata_arrays_(rhs.edata_arrays_) {}
   EncodedNbr(const uint8_t* ptr, size_t capacity, const void** edata_arrays)
       : ptr_(ptr), edata_arrays_(edata_arrays) {
     data_.eid = 0;
     data_.vid = 0;
-    if (capacity > 0)
-      decode();
+    capacity_ = capacity;
+    decode();
   }
 
   EncodedNbr& operator=(const EncodedNbr& rhs) {
     ptr_ = rhs.ptr_;
     data_ = rhs.data_;
-    size_ = rhs.size_;
+    offset_ = rhs.offset_;
     edata_arrays_ = rhs.edata_arrays_;
     return *this;
   }
@@ -540,20 +540,27 @@ struct EncodedNbr {
   EncodedNbr& operator=(EncodedNbr&& rhs) {
     ptr_ = std::move(rhs.ptr_);
     data_ = rhs.data_;
-    size_ = rhs.size_;
+    offset_ = rhs.offset_;
     edata_arrays_ = std::move(rhs.edata_arrays_);
     return *this;
   }
 
   inline void decode() const {
+    if (capacity_ <= 0) {
+      return;
+    }
     eid_t eid;
     vid_t vid;
-    size_t e_size, v_size;
-    v_size = varint_decode(ptr_, vid);
-    e_size = varint_decode(ptr_ + v_size, eid);
+    // size_t e_size, v_size;
+    uint8_t *next = const_cast<uint8_t *>(ptr_);
+    // v_size = varint_decode(ptr_, vid);
+    // e_size = varint_decode(ptr_ + v_size, eid);
+    next = varint_vbdec(next, vid);
+    next = varint_vbdec(next, eid);
     data_.vid += vid;
     data_.eid = eid;
-    size_ = v_size + e_size;
+    // size_ = v_size + e_size;
+    offset_ = next - ptr_;
   }
 
   grape::Vertex<VID_T> neighbor() const {
@@ -584,7 +591,8 @@ struct EncodedNbr {
   }
 
   inline const EncodedNbr& operator++() const {
-    ptr_ += size_;
+    ptr_ += offset_;
+    capacity_ -= offset_;
     /*
      * This may cause the program to crash due to out-of-bounds access.
      * Currently, this part is controlled by iterators. The default user access
@@ -625,7 +633,8 @@ struct EncodedNbr {
  private:
   const mutable uint8_t* ptr_;
   mutable NbrUnit<VID_T, EID_T> data_;
-  mutable size_t size_;
+  mutable size_t offset_;
+  mutable size_t capacity_;
 
   const void** edata_arrays_;
 };

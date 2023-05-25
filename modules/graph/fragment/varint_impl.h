@@ -17,6 +17,7 @@ limitations under the License.
 #define MODULES_GRAPH_FRAGMENT_VARINT_IMPL_H_
 #include <bits/types.h>
 #include <vector>
+#include "graph/integer_compact/include/ic.h"
 
 namespace vineyard {
 
@@ -64,6 +65,35 @@ inline size_t varint_decode(const uint8_t* input, T& output) {
     input += 2 + sh;
   }
   return static_cast<size_t>(input - origin_input);
+}
+
+template <typename T>
+inline void varint_vbenc_(std::vector<T> &input, std::vector<uint8_t>& output) {
+  output.resize(input.size() * 9);
+  uint8_t *end;
+  end = vbenc64(input.data(), input.size(), output.data());
+  output.resize(end - output.data());
+}
+
+template <typename T>
+inline size_t varint_vbenc(T input, std::vector<uint8_t>& output) {
+  uint8_t arr[9];
+  uint8_t *end;
+  uint64_t temp = input;
+  end = vbenc64(&temp, 1, arr);
+  for (int i = 0; i < end - arr; i++) {
+    output.push_back(arr[i]);
+  }
+  return static_cast<size_t>(end - arr);
+}
+
+template <typename T>
+inline uint8_t *varint_vbdec(uint8_t* input, T& output) {
+  uint64_t temp;
+  uint8_t *next;
+  next = vbdec64(input, 1, &temp);
+  output = static_cast<T>(temp);
+  return next;
 }
 
 }  // namespace vineyard

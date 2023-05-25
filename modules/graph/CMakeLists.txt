@@ -49,6 +49,14 @@ file(GLOB_RECURSE GRAPH_SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}" "fragment/*.cc"
 )
 
 add_library(vineyard_graph ${GRAPH_SRC_FILES})
+
+add_custom_target(ic ALL
+                  COMMAND make libic.so -j16 -C ${CMAKE_CURRENT_SOURCE_DIR}/integer_compact/)
+add_custom_target(ic_clean
+                    COMMAND make clean -C ${CMAKE_CURRENT_SOURCE_DIR}/integer_compact/)
+add_dependencies(vineyard_graph ic)
+# FILE(GLOB IC ${CMAKE_CURRENT_SOURCE_DIR}/integer_compact/*.so)
+
 target_add_debuginfo(vineyard_graph)
 target_compile_options(vineyard_graph PUBLIC "-fopenmp")
 target_link_options(vineyard_graph PUBLIC "-fopenmp")
@@ -118,6 +126,7 @@ target_link_libraries(vineyard_graph PUBLIC vineyard_client
                                             vineyard_io
                                             ${ARROW_SHARED_LIB}
                                             ${MPI_CXX_LIBRARIES}
+                                            ${CMAKE_CURRENT_SOURCE_DIR}/integer_compact/libic.so
 )
 if(${LIBUNWIND_FOUND})
     target_link_libraries(vineyard_graph PUBLIC ${LIBUNWIND_LIBRARIES})

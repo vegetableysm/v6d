@@ -694,19 +694,37 @@ boost::leaf::result<void> generate_varint_edges(
   std::vector<std::vector<uint8_t>> encoded_id_sub_lists;
   encoded_id_sub_lists.resize(e_offsets_lists_size - 1);
 
+  // std::vector<std::vector<uint64_t>> temp_vec;
+  // temp_vec.resize(e_offsets_lists_size - 1);
+
+  // prepare data
+  // std::vector<uint64_t> temp_vec;
+  // temp_vec.reserve(list_size * 2);
+  // VID_T pre_vid = 0;
+  // for (int i = 0; i < list_size; i++) {
+  //   temp_vec.push_back(e_list[i].vid - pre_vid);
+  //   tem_vec.push_back(e_list[i].eid);
+  //   pre_vid = e_list[i].vid;
+  // }
+  // varint_vbenc(temp_vec, encoded_id_list);
+
   parallel_for(static_cast<size_t>(0), e_offsets_lists_size - 1,
                [&e_list, &e_offsets_lists_, &encoded_id_sub_lists](int64_t k) {
                   VID_T pre_vid = 0;
-                  encoded_id_sub_lists[k].resize(9 * (e_offsets_lists_[k + 1] - e_offsets_lists_[k]));
-                  encoded_id_sub_lists[k].resize(0);
+                  encoded_id_sub_lists[k].reserve((e_offsets_lists_[k + 1] - e_offsets_lists_[k]) * 9);
                   for (int64_t count = e_offsets_lists_[k];
                       count < e_offsets_lists_[k + 1];
                       count++) {
-                   varint_encode(e_list[count].vid - pre_vid, encoded_id_sub_lists[k]);
-                   varint_encode(e_list[count].eid, encoded_id_sub_lists[k]);
+                  //  varint_encode(e_list[count].vid - pre_vid, encoded_id_sub_lists[k]);
+                  //  varint_encode(e_list[count].eid, encoded_id_sub_lists[k]);
+                    // temp_vec[k].push_back(e_list[count].vid - pre_vid);
+                    // temp_vec[k].push_back(e_list[count].eid);
+                    varint_vbenc(e_list[count].vid - pre_vid, encoded_id_sub_lists[k]);
+                    varint_vbenc(e_list[count].eid, encoded_id_sub_lists[k]);
 
-                   pre_vid = e_list[count].vid;
-                 }
+                    pre_vid = e_list[count].vid;
+                  }
+                //  varint_vbenc(temp_vec[k], encoded_id_sub_lists[k]);
                },
                concurrency);
 
