@@ -23,6 +23,7 @@ limitations under the License.
 #include "graph/fragment/property_graph_types.h"
 #include "graph/fragment/property_graph_utils.h"
 #include "graph/fragment/varint_impl.h"
+#include "common/util/functions.h"
 
 namespace vineyard {
 
@@ -708,6 +709,7 @@ boost::leaf::result<void> generate_varint_edges(
   // }
   // varint_vbenc(temp_vec, encoded_id_list);
 
+  auto gen_edge_start_time = vineyard::GetCurrentTime();
   parallel_for(static_cast<size_t>(0), e_offsets_lists_size - 1,
                [&e_list, &e_offsets_lists_, &encoded_id_sub_lists](int64_t k) {
                   VID_T pre_vid = 0;
@@ -727,18 +729,26 @@ boost::leaf::result<void> generate_varint_edges(
                 //  varint_vbenc(temp_vec[k], encoded_id_sub_lists[k]);
                },
                concurrency);
+  auto gen_edge_end_time = vineyard::GetCurrentTime();
+  LOG(INFO) << "generate edges time: " << gen_edge_end_time - gen_edge_start_time;
 
+  gen_edge_start_time = vineyard::GetCurrentTime();
   encoded_offsets_list[0] = 0;
   for (size_t i = 0; i < encoded_id_sub_lists.size(); i++) {
     encoded_offsets_list[i + 1] = encoded_offsets_list[i] + encoded_id_sub_lists[i].size();
   }
+  gen_edge_end_time = vineyard::GetCurrentTime();
+  LOG(INFO) << "generate offsets time: " << gen_edge_end_time - gen_edge_start_time;
 
+  gen_edge_start_time = vineyard::GetCurrentTime();
   encoded_id_list.resize(encoded_offsets_list[e_offsets_lists_size - 1]);
   parallel_for(static_cast<size_t>(0), encoded_id_sub_lists.size(),
                [&encoded_id_sub_lists, &encoded_id_list, &encoded_offsets_list](int64_t i) {
                  memcpy(encoded_id_list.data() + encoded_offsets_list[i], encoded_id_sub_lists[i].data(), encoded_id_sub_lists[i].size());
                },
                concurrency);
+  gen_edge_end_time = vineyard::GetCurrentTime();
+  LOG(INFO) << "copy edges time: " << gen_edge_end_time - gen_edge_start_time;
   return {};
 }
 

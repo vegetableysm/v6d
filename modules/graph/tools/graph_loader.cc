@@ -517,9 +517,9 @@ int main(int argc, char** argv) {
   }
 
   grape::InitMPIComm();
-  auto start_time = vineyard::GetMicroTimestamp();
+  auto start_time = vineyard::GetCurrentTime();
   { vineyard::loading_vineyard_graph(options); }
-  auto finish_time = vineyard::GetMicroTimestamp();
+  auto finish_time = vineyard::GetCurrentTime();
   grape::FinalizeMPIComm();
 
   LOG(INFO) << "Time usage: " << ((finish_time - start_time) / 1000000.0)

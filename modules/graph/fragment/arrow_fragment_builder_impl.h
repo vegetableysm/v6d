@@ -1205,7 +1205,7 @@ boost::leaf::result<void>
 BasicArrowFragmentBuilder<OID_T, VID_T, VERTEX_MAP_T, ENCODED>::initEdges(
     std::vector<std::shared_ptr<arrow::Table>>&& edge_tables, int concurrency) {
   LOG(INFO) << "Gen edges list start...";
-  auto gen_edge_start_time = vineyard::GetMicroTimestamp();
+  auto gen_edge_start_time = vineyard::GetCurrentTime();
   assert(edge_tables.size() == static_cast<size_t>(this->edge_label_num_));
   edge_tables_.resize(this->edge_label_num_);
 
@@ -1311,13 +1311,13 @@ BasicArrowFragmentBuilder<OID_T, VID_T, VERTEX_MAP_T, ENCODED>::initEdges(
             << ", peak: " << get_peak_rss_pretty();
 
   LOG(INFO) << "Generate edges lists finished.";
-  auto gen_edge_finish_time = vineyard::GetMicroTimestamp();
+  auto gen_edge_finish_time = vineyard::GetCurrentTime();
 
   LOG(INFO) << "Generate edge time usage: " << ((gen_edge_finish_time - gen_edge_start_time) / 1000000.0)
             << " seconds";
 
   LOG(INFO) << "Compact edges start...";
-  auto start_time = vineyard::GetMicroTimestamp();
+  auto start_time = vineyard::GetCurrentTime();
   int64_t generate_varint_time = 0;
   int64_t memcpy_time = 0;
 
@@ -1360,31 +1360,31 @@ BasicArrowFragmentBuilder<OID_T, VID_T, VERTEX_MAP_T, ENCODED>::initEdges(
         std::vector<int64_t> encoded_oe_offsets_vec, encoded_ie_offsets_vec;
 
 
-        auto generate_varint_start_time = vineyard::GetMicroTimestamp();
+        auto generate_varint_start_time = vineyard::GetCurrentTime();
         generate_varint_edges<vid_t, eid_t>(this->oe_lists_[v_label][e_label]->data(),
                               oe_lists_[v_label][e_label]->size(),
                               this->oe_offsets_lists_[v_label][e_label]->data(),
                               this->oe_offsets_lists_[v_label][e_label]->size(),
                               encoded_oe_vec, encoded_oe_offsets_vec, concurrency);
-        auto generate_varint_finish_time = vineyard::GetMicroTimestamp();
+        auto generate_varint_finish_time = vineyard::GetCurrentTime();
         generate_varint_time +=
             (generate_varint_finish_time - generate_varint_start_time);
 
         encoded_oe_sub_lists_[e_label] = std::make_shared<FixedUInt8Builder>(
             client_, encoded_oe_vec.size() * sizeof(uint8_t));
-        auto memcpy_start_time = vineyard::GetMicroTimestamp();
+        auto memcpy_start_time = vineyard::GetCurrentTime();
         memcpy(encoded_oe_sub_lists_[e_label]->data(), encoded_oe_vec.data(),
                encoded_oe_vec.size() * sizeof(uint8_t));
-        auto memcpy_finish_time = vineyard::GetMicroTimestamp();
+        auto memcpy_finish_time = vineyard::GetCurrentTime();
         memcpy_time += (memcpy_finish_time - memcpy_start_time);
         encoded_oe_offsets_sub_lists_[e_label] =
             std::make_shared<FixedInt64Builder>(client_,
                                                 encoded_oe_offsets_vec.size());
-        memcpy_start_time = vineyard::GetMicroTimestamp();
+        memcpy_start_time = vineyard::GetCurrentTime();
         memcpy(encoded_oe_offsets_sub_lists_[e_label]->data(),
                encoded_oe_offsets_vec.data(),
                encoded_oe_offsets_vec.size() * sizeof(int64_t));
-        memcpy_finish_time = vineyard::GetMicroTimestamp();
+        memcpy_finish_time = vineyard::GetCurrentTime();
         memcpy_time += (memcpy_finish_time - memcpy_start_time);
 
         this->encoded_oe_lists_[v_label][e_label] =
@@ -1393,34 +1393,34 @@ BasicArrowFragmentBuilder<OID_T, VID_T, VERTEX_MAP_T, ENCODED>::initEdges(
             encoded_oe_offsets_sub_lists_[e_label];
 
         if (this->directed_) {
-          auto generate_varint_start_time = vineyard::GetMicroTimestamp();
+          auto generate_varint_start_time = vineyard::GetCurrentTime();
           generate_varint_edges<vid_t, eid_t>(
               this->ie_lists_[v_label][e_label]->data(),
               ie_lists_[v_label][e_label]->size(),
               this->ie_offsets_lists_[v_label][e_label]->data(),
               this->ie_offsets_lists_[v_label][e_label]->size(), encoded_ie_vec,
               encoded_ie_offsets_vec, concurrency);
-          auto generate_varint_finish_time = vineyard::GetMicroTimestamp();
+          auto generate_varint_finish_time = vineyard::GetCurrentTime();
           generate_varint_time +=
               (generate_varint_finish_time - generate_varint_start_time);
           
           encoded_ie_sub_lists_[e_label] = std::make_shared<FixedUInt8Builder>(
               client_, encoded_ie_vec.size() * sizeof(uint8_t));
           
-          auto memcpy_start_time = vineyard::GetMicroTimestamp();
+          auto memcpy_start_time = vineyard::GetCurrentTime();
           memcpy(encoded_ie_sub_lists_[e_label]->data(), encoded_ie_vec.data(),
                  encoded_ie_vec.size() * sizeof(uint8_t));
-          auto memcpy_finish_time = vineyard::GetMicroTimestamp();
+          auto memcpy_finish_time = vineyard::GetCurrentTime();
           memcpy_time += (memcpy_finish_time - memcpy_start_time);
 
           encoded_ie_offsets_sub_lists_[e_label] =
               std::make_shared<FixedInt64Builder>(
                   client_, encoded_ie_offsets_vec.size());
-          memcpy_start_time = vineyard::GetMicroTimestamp();
+          memcpy_start_time = vineyard::GetCurrentTime();
           memcpy(encoded_ie_offsets_sub_lists_[e_label]->data(),
                  encoded_ie_offsets_vec.data(),
                  encoded_ie_offsets_vec.size() * sizeof(int64_t));
-          memcpy_finish_time = vineyard::GetMicroTimestamp();
+          memcpy_finish_time = vineyard::GetCurrentTime();
           memcpy_time += (memcpy_finish_time - memcpy_start_time);
 
           this->encoded_ie_lists_[v_label][e_label] =
@@ -1432,7 +1432,7 @@ BasicArrowFragmentBuilder<OID_T, VID_T, VERTEX_MAP_T, ENCODED>::initEdges(
     }
   }
   LOG(INFO) << "Compact edges finished.";
-  auto finish_time = vineyard::GetMicroTimestamp();
+  auto finish_time = vineyard::GetCurrentTime();
 
   LOG(INFO) << "Compact time usage: " << ((finish_time - start_time) / 1000000.0)
             << " seconds";
