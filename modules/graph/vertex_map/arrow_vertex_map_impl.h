@@ -85,7 +85,13 @@ void ArrowVertexMap<OID_T, VID_T>::Construct(const vineyard::ObjectMeta& meta) {
                                            "_" + std::to_string(j)));
         oid_arrays_[i][j] = array.GetArray();
         o2g_p_[i][j].ConstructHashmapFunction(oid_arrays_[i][j]);
-
+        double time = GetCurrentTime();
+        for (int64_t k = 0; k < oid_arrays_[i][j]->length(); ++k) {
+          const std::pair<OID_T, VID_T>* res = o2g_p_[i][j].find(oid_arrays_[i][j]->GetView(k));
+          delete res;
+        }
+        LOG(INFO) << "Query time: " << (GetCurrentTime() - time)
+                  << "s";
         local_oid_total += array.nbytes();
         o2g_size += o2g_p_[i][j].size();
         o2g_total_bytes += o2g_p_[i][j].nbytes();

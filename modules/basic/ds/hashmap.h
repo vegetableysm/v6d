@@ -257,7 +257,7 @@ class PerfectHashmapBuilder : public PerfectHashmapBaseBuilder<K, V> {
       vec_k_[count] = kv_.first;
       count++;
     }
-    VLOG(100) << "Constructing the vec_k_ takes "
+    LOG(INFO) << "Constructing the vec_k_ takes "
               << GetCurrentTime() - start_time << " s.";
 
     auto data_iterator = boomphf::range(vec_k_.begin(), vec_k_.end());
@@ -281,7 +281,7 @@ class PerfectHashmapBuilder : public PerfectHashmapBaseBuilder<K, V> {
           }
         },
         concurrency_);
-    VLOG(100) << "Parallel for constructing the vec_v_ takes "
+    LOG(INFO) << "Parallel for constructing the vec_v_ takes "
               << GetCurrentTime() - start_time << " s.";
   }
 
