@@ -27,6 +27,7 @@ import java.util.List;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.*;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedInputFormatInterface;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.InputSplit;
@@ -51,10 +52,10 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, Vectorize
         return new VineyardBatchRecordReader(job, (VineyardSplit) genericSplit);
     }
 
-    @Override
-    public VectorizedSupport.Support[] getSupportedFeatures() {
-        return new VectorizedSupport.Support[] {VectorizedSupport.Support.DECIMAL_64};
-    }
+    // @Override
+    // public VectorizedSupport.Support[] getSupportedFeatures() {
+    //     return new VectorizedSupport.Support[] {VectorizedSupport.Support.DECIMAL_64};
+    // }
 
     @Override
     public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
@@ -65,7 +66,7 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, Vectorize
         ObjectID tableObjectID[];
         Table table[];
         try {
-            client = new IPCClient("/tmp/vineyard/vineyard.sock");
+            client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
         } catch (Exception e) {
             System.out.println("Connect vineyard failed.");
             return splits.toArray(new VineyardSplit[splits.size()]);
@@ -192,7 +193,7 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
         if (client == null) {
             // TBD: get vineyard socket path from table properties
             try {
-                client = new IPCClient("/tmp/vineyard/vineyard.sock");
+                client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
             } catch (Exception e) {
                 System.out.println("connect to vineyard failed!");
                 System.out.println(e.getMessage());

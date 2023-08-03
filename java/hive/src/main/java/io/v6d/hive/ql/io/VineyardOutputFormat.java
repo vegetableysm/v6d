@@ -198,7 +198,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         // connect to vineyard
         if (client == null) {
             // TBD: get vineyard socket path from table properties
-            client = new IPCClient("/tmp/vineyard/vineyard.sock");
+            client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
         }
         if (client == null || !client.connected()) {
             throw new VineyardException.Invalid("failed to connect to vineyard");
@@ -306,7 +306,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
                     case INTERVAL_DAY_TIME:
                         return Types.MinorType.INTERVALDAY.getType();
                     case VOID:
-                    case TIMESTAMPLOCALTZ:
+                    // case TIMESTAMPLOCALTZ:
                     case UNKNOWN:
                     default:
                         throw new IllegalArgumentException();

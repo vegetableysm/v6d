@@ -31,11 +31,22 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 
 public class VineyardSerDe extends ArrowColumnarBatchSerDe {
     StructTypeInfo rowTypeInfo;
-    
+
+    @Override
+    public void initialize(Configuration configuration, Properties tableProperties)
+            throws SerDeException {
+        super.initialize(configuration, tableProperties);
+        initializeTypeInfo(configuration, tableProperties);
+    }
+
     @Override
     public void initialize(Configuration configuration, Properties tableProperties, Properties partitionProperties)
-        throws SerDeException {
+            throws SerDeException {
         super.initialize(configuration, tableProperties, partitionProperties);
+        initializeTypeInfo(configuration, tableProperties);
+    }
+
+    public void initializeTypeInfo(Configuration configuration, Properties tableProperties) {
         String columnNameProperty = tableProperties.getProperty("columns");
         String columnTypeProperty = tableProperties.getProperty("columns.types");
         String columnNameDelimiter = tableProperties.containsKey("column.name.delimiter") ? tableProperties.getProperty("column.name.delimiter") : String.valueOf(',');
