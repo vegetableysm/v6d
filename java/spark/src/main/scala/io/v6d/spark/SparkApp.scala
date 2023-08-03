@@ -73,15 +73,15 @@ object SparkApp {
         |        stored as
         |            INPUTFORMAT 'io.v6d.hive.ql.io.VineyardInputFormat'
         |            OUTPUTFORMAT 'io.v6d.hive.ql.io.VineyardOutputFormat';
-        |""".stripMargin)
+        |""".stripMargin).show()
     spark.sql(
       """
         |insert into hive_example values(1, 1, true, 'a', 1.0, 1.0), (2, 2, true, 'b', 2.0, 2.0), (3, 3, false, 'c', 3.0, 3.0);
-        |""".stripMargin)
+        |""".stripMargin).show()
     spark.sql(
       """
         |select * from hive_example;
-        |""".stripMargin)
+        |""".stripMargin).show()
 
     val sc: SparkContext = spark.sparkContext
     sc.stop()

@@ -66,8 +66,8 @@ done
 
 SOURCE_DIR=${SOURCE_DIR:-"../../.."}
 repo=${REPO:-apache}
-# WORK_DIR="$(mktemp -d)"
-WORK_DIR="/opt/tao/hive-docker-build"
+WORK_DIR="$(mktemp -d)"
+#WORK_DIR="/opt/tao/hive-docker-build"
 mkdir -p "$WORK_DIR"
 # HADOOP_VERSION=${HADOOP_VERSION:-$(mvn -f "$SOURCE_DIR/pom.xml" -q help:evaluate -Dexpression=hadoop.version -DforceStdout)}
 # TEZ_VERSION=${TEZ_VERSION:-$(mvn -f "$SOURCE_DIR/pom.xml" -q help:evaluate -Dexpression=tez.version -DforceStdout)}
@@ -77,25 +77,25 @@ HIVE_VERSION=${HIVE_VERSION:-"2.3.9"}
 
 HADOOP_URL=${HADOOP_URL:-"https://archive.apache.org/dist/hadoop/core/hadoop-$HADOOP_VERSION/hadoop-$HADOOP_VERSION.tar.gz"}
 echo "Downloading Hadoop from $HADOOP_URL..."
-# if ! curl --fail -L "$HADOOP_URL" -o "$WORK_DIR/hadoop-$HADOOP_VERSION.tar.gz"; then
-#   echo "Fail to download Hadoop, exiting...."
-#   exit 1
-# fi
+if ! curl --fail -L "$HADOOP_URL" -o "$WORK_DIR/hadoop-$HADOOP_VERSION.tar.gz"; then
+  echo "Fail to download Hadoop, exiting...."
+  exit 1
+fi
 
 TEZ_URL=${TEZ_URL:-"https://archive.apache.org/dist/tez/$TEZ_VERSION/apache-tez-$TEZ_VERSION-bin.tar.gz"}
 echo "Downloading Tez from $TEZ_URL..."
-# if ! curl --fail -L "$TEZ_URL" -o "$WORK_DIR/apache-tez-$TEZ_VERSION-bin.tar.gz"; then
-#   echo "Failed to download Tez, exiting..."
-#   exit 1
-# fi
+if ! curl --fail -L "$TEZ_URL" -o "$WORK_DIR/apache-tez-$TEZ_VERSION-bin.tar.gz"; then
+  echo "Failed to download Tez, exiting..."
+  exit 1
+fi
 
 if [ -n "$HIVE_VERSION" ]; then
   HIVE_URL=${HIVE_URL:-"https://archive.apache.org/dist/hive/hive-$HIVE_VERSION/apache-hive-$HIVE_VERSION-bin.tar.gz"}
   echo "Downloading Hive from $HIVE_URL..."
-  # if ! curl --fail -L "$HIVE_URL" -o "$WORK_DIR/apache-hive-$HIVE_VERSION-bin.tar.gz"; then
-  #   echo "Failed to download Hive, exiting..."
-  #   exit 1
-  # fi
+  if ! curl --fail -L "$HIVE_URL" -o "$WORK_DIR/apache-hive-$HIVE_VERSION-bin.tar.gz"; then
+    echo "Failed to download Hive, exiting..."
+    exit 1
+  fi
   hive_package="$WORK_DIR/apache-hive-$HIVE_VERSION-bin.tar.gz"
 else
     HIVE_VERSION=$(mvn -f "$SOURCE_DIR/pom.xml" -q help:evaluate -Dexpression=project.version -DforceStdout)
@@ -119,4 +119,4 @@ docker build \
         --build-arg "HADOOP_VERSION=$HADOOP_VERSION" \
         --build-arg "TEZ_VERSION=$TEZ_VERSION" \
 
-# rm -r "${WORK_DIR}"
+rm -r "${WORK_DIR}"
