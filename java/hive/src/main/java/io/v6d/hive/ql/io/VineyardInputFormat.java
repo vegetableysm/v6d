@@ -128,7 +128,7 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, Vectorize
             int partitionBatchSize = table[i].getBatches().size() / partitionSplitCount;
             System.out.println("partitionBatchSize:" + partitionBatchSize);
             for (int j = 0; j < partitionSplitCount; j++) {
-                VineyardSplit vineyardSplit = new VineyardSplit(paths[i], 0, 0, job);
+                VineyardSplit vineyardSplit = new VineyardSplit(paths[i], 0, table[i].getBatch(i).getBatch().getRowCount(), job);
                 if (j == partitionSplitCount - 1) {
                     vineyardSplit.setBatch(j * partitionBatchSize, table[i].getBatches().size() - j * partitionBatchSize);
                 } else {
@@ -159,6 +159,9 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, Vectorize
         }
         client.disconnect();
         System.out.println("Splits size:" + splits.size());
+        for (int i = 0; i < splits.size(); i++) {
+            System.out.println("Split[" + i + "] length:" + splits.get(i).getLength());
+        }
         return splits.toArray(new VineyardSplit[splits.size()]);
     }
 }
@@ -251,7 +254,6 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
     /**
      * Copy data from the Arrow RecordBatch to the VectorizedRowBatch.
      *
-     * @param recordBatch the Arrow RecordBatch to copy from
      * @param batch the VectorizedRowBatch to copy to
      */
     private void arrowToVectorizedRowBatch(VectorizedRowBatch batch) {
