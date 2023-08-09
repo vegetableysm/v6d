@@ -48,6 +48,7 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, Vectorize
     public RecordReader<NullWritable, VectorizedRowBatch>
     getRecordReader(InputSplit genericSplit, JobConf job, Reporter reporter)
             throws IOException {
+        System.out.println("getRecordReader");
         reporter.setStatus(genericSplit.toString());
         return new VineyardBatchRecordReader(job, (VineyardSplit) genericSplit);
     }
@@ -59,6 +60,8 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, Vectorize
 
     @Override
     public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
+        System.out.println("getSplits");
+        (new Exception()).printStackTrace();
         List<InputSplit> splits = new ArrayList<InputSplit>();
         Path paths[] = FileInputFormat.getInputPaths(job);
 
@@ -155,6 +158,7 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, Vectorize
             System.out.println("table[" + i + "] split count:" + partitionsSplitCount[i]);
         }
         client.disconnect();
+        System.out.println("Splits size:" + splits.size());
         return splits.toArray(new VineyardSplit[splits.size()]);
     }
 }
@@ -179,6 +183,7 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
     private boolean addPartitionCols = true;
 
     VineyardBatchRecordReader(JobConf job, VineyardSplit split) throws IOException {
+        System.out.println("VineyardBatchRecordReader");
         String path = split.getPath().toString();
         // int index = path.lastIndexOf("/");
         // tableName = path.substring(index + 1);

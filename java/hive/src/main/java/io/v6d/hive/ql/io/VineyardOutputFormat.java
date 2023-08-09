@@ -139,15 +139,18 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             return;
         }
         tableName = location;
-        for (int i = 1; i < pathSplits.length; i++) {
-            if (pathSplits[i].length() > 0 && hiddernPathFilter.accept(new Path(pathSplits[i]))) {
-                System.out.println("path split:" + pathSplits[i]);
-                tableName += "/" + pathSplits[i];
-            } else if (pathSplits[i].length() > 0 && vineyardPathFilter.accept(new Path(pathSplits[i]))) {
-                System.out.println("path split:" + pathSplits[i].substring(10, pathSplits[i].length()));
-                tableName += "/" + pathSplits[i].substring(10, pathSplits[i].length());
-            }
-        }
+
+        System.out.println("Path:" + path);
+        //spark
+        // for (int i = 1; i < pathSplits.length; i++) {
+        //     if (pathSplits[i].length() > 0 && hiddernPathFilter.accept(new Path(pathSplits[i]))) {
+        //         System.out.println("path split:" + pathSplits[i]);
+        //         tableName += "/" + pathSplits[i];
+        //     } else if (pathSplits[i].length() > 0 && vineyardPathFilter.accept(new Path(pathSplits[i]))) {
+        //         System.out.println("path split:" + pathSplits[i].substring(10, pathSplits[i].length()));
+        //         tableName += "/" + pathSplits[i].substring(10, pathSplits[i].length());
+        //     }
+        // }
         tableName = tableName.replaceAll("/", "#");
         // System.out.println("Table name:" + tableName);
 
@@ -156,7 +159,8 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         tmpFilePath = tmpFilePath.substring(0, tmpFilePath.lastIndexOf("/"));
         // System.out.println("out path:" + tmpFilePath);
         tmpFilePath = tmpFilePath.replaceAll("_task", "");
-        Path tmpPath = new Path(tmpFilePath, "vineyard.tmp");
+        // Path tmpPath = new Path(tmpFilePath, "vineyard.tmp");
+        Path tmpPath = new Path(tmpFilePath, pathSplits[pathSplits.length - 1]);
         try {
             fs = finalOutPath.getFileSystem(jc);
             System.out.println("tmp path:" + tmpPath.toString());
@@ -262,6 +266,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             client.persist(meta.getId());
             System.out.println("Table persisted, name:" + tableName);
             client.putName(meta.getId(), tableName);
+            System.out.println("record batch size:" + tableBuilder.getBatchSize());
         } catch (Exception e) {
             throw new IOException("Seal TableBuilder failed");
         }

@@ -16,14 +16,33 @@ package io.v6d.hadoop.fs;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
+import org.apache.hadoop.fs.Options.HandleOpt;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.util.Progressable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+class VineyardOutputStream extends FSDataOutputStream {
+
+    public VineyardOutputStream() throws IOException {
+        super(new DataOutputBuffer(100), null);
+    }
+
+    @Override
+    public void close() throws IOException {
+        super.close();
+    }
+
+    @Override
+    public String toString() {
+        return new String("vineyard");
+    }
+}
 public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     public static final String SCHEME = "vineyard";
 
@@ -36,6 +55,9 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
 
     public FileSystem(final URI uri, final Configuration conf) {
         super();
+        System.out.println("=================");
+        System.out.println("FileSystem: " + uri);
+        System.out.println("=================");
     }
 
     @Override
@@ -57,12 +79,18 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     public void initialize(URI name, Configuration conf) throws IOException {
         super.initialize(name, conf);
 
+        System.out.println("=================");
         logger.info("Initialize vineyard file system: {}", name);
+        System.out.println("Initialize vineyard file system: " + name);
+        System.out.println("=================");
         this.uri = name;
     }
 
     @Override
     public FSDataInputStream open(Path path, int i) throws IOException {
+        System.out.println("=================");
+        System.out.println("open: " + path.toString());
+        System.out.println("=================");
         return null;
     }
 
@@ -76,27 +104,44 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
             long l,
             Progressable progressable)
             throws IOException {
-        return null;
+        System.out.println("=================");
+        System.out.println("Create:" + path);
+        System.out.println("=================");
+        return new FSDataOutputStream(new VineyardOutputStream(), null);
     }
 
     @Override
     public FSDataOutputStream append(Path path, int i, Progressable progressable)
             throws IOException {
+        System.out.println("=================");
+        System.out.println("append:" + path);
+        System.out.println("=================");
         return null;
     }
 
     @Override
     public boolean rename(Path path, Path path1) throws IOException {
-        return false;
+        System.out.println("=================");
+        System.out.println("rename: " + path + " to " + path1);
+        System.out.println("=================");
+        return true;
     }
 
     @Override
     public boolean delete(Path path, boolean b) throws IOException {
-        return false;
+        System.out.println("=================");
+        System.out.println("delete: " + path);
+        System.out.println("=================");
+        return true;
     }
 
     @Override
     public FileStatus[] listStatus(Path path) throws FileNotFoundException, IOException {
+        System.out.println("=================");
+        System.out.println("listStatus: " + path);
+        System.out.println("=================");
+        //FileStatus fileStatus = new FileStatus(10, true, 1, 10, 0, path);
+        // return null;// new FileStatus[] {fileStatus};
         return new FileStatus[0];
     }
 
@@ -105,16 +150,51 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
 
     @Override
     public Path getWorkingDirectory() {
-        return null;
+        System.out.println("=================");
+        System.out.println("getWorkingDirectory");
+        System.out.println("=================");
+        return null;// new Path("/");
     }
 
     @Override
     public boolean mkdirs(Path path, FsPermission fsPermission) throws IOException {
-        return false;
+        System.out.println("=================");
+        System.out.println("mkdirs: " + path);
+        System.out.println("=================");
+        return true;
     }
 
     @Override
     public FileStatus getFileStatus(Path path) throws IOException {
-        return new FileStatus(0, true, 1, 0, 0, path);
+        System.out.println("=================");
+        System.out.println("getFileStatus: " + path.toString());
+        System.out.println("=================");
+        return new FileStatus(10, true, 1, 10, 0, path);
     }
+
+    @Override
+    public byte[] getXAttr(Path path, String name) throws IOException {
+        System.out.println("=================");
+        System.out.println("getXAttr: " + path);
+        System.out.println("Get name:" + name);
+        System.out.println("=================");
+        return new byte[0];
+    }
+
+    // @Override
+    // public BlockLocation[] getFileBlockLocations(FileStatus file,
+    //   long start, long len) throws IOException {
+    //     System.out.println("=================");
+    //     System.out.println("getFileBlockLocations: " + file);
+    //     System.out.println("=================");
+    //     return new BlockLocation[0];
+    // }
+
+    // @Override
+    // public FsServerDefaults getServerDefaults() throws IOException {
+    //     System.out.println("=================");
+    //     System.out.println("getServerDefaults: ");
+    //     System.out.println("=================");
+    //     return null;
+    // }
 }
