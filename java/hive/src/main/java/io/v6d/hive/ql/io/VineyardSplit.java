@@ -25,6 +25,7 @@ public class VineyardSplit extends FileSplit {
 
     @Override
     public Path getPath() {
+        System.out.println("getPath");
         return super.getPath();
     }
 
@@ -35,11 +36,13 @@ public class VineyardSplit extends FileSplit {
 
     @Override
     public String[] getLocations() throws IOException {
+        System.out.println("getLocations");
         return new String[0];
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
+        System.out.println("readFields");
         super.readFields(in);
         batchStartIndex = in.readInt();
         batchSize = in.readInt();
@@ -47,6 +50,7 @@ public class VineyardSplit extends FileSplit {
 
     @Override
     public void write(DataOutput out) throws IOException {
+        System.out.println("write");
         super.write(out);
         out.writeInt(batchStartIndex);
         out.writeInt(batchSize);

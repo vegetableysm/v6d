@@ -1,66 +1,55 @@
-/** Copyright 2020-2023 Alibaba Group Holding Limited.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package io.v6d.hive.ql.io;
 
-import io.v6d.core.client.IPCClient;
-import io.v6d.core.client.ds.ObjectFactory;
-import io.v6d.core.common.util.ObjectID;
-import io.v6d.modules.basic.arrow.Arrow;
-import io.v6d.modules.basic.arrow.Table;
-
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.complex.NonNullableStructVector;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.Schema;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.llap.FieldDesc;
+import org.apache.hadoop.hive.llap.Row;
 import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.exec.vector.*;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedInputFormatInterface;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
-import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.hive.ql.io.arrow.ArrowWrapperWritable;
+import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
+import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
-
-import org.apache.arrow.vector.*;
-import org.apache.arrow.vector.types.pojo.*;
-import org.apache.hadoop.fs.Path;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class VineyardInputFormat extends HiveInputFormat<NullWritable, VectorizedRowBatch> implements VectorizedInputFormatInterface {
-    public VineyardInputFormat() {
-        super();
-        System.out.println("VineyardInputFormat");
-    }
+import io.v6d.core.client.IPCClient;
+import io.v6d.core.client.ds.ObjectFactory;
+import io.v6d.core.common.util.ObjectID;
+import io.v6d.core.common.util.VineyardException;
+import io.v6d.modules.basic.arrow.Arrow;
+import io.v6d.modules.basic.arrow.RecordBatchBuilder;
+import io.v6d.modules.basic.arrow.Table;
+import io.v6d.modules.basic.arrow.TableBuilder;
+import lombok.val;
 
+public class VineyardBackUpInputFormat extends HiveInputFormat<NullWritable, RowWritable> implements VectorizedInputFormatInterface {
     @Override
-    public RecordReader<NullWritable, VectorizedRowBatch>
+    public RecordReader<NullWritable, RowWritable>
     getRecordReader(InputSplit genericSplit, JobConf job, Reporter reporter)
-            throws IOException {
-        System.out.println("getRecordReader");
+        throws IOException {
         reporter.setStatus(genericSplit.toString());
-        return new VineyardBatchRecordReader(job, (VineyardSplit) genericSplit);
+        System.out.printf("creating vineyard record reader\n");
+        System.out.println("split class:" + genericSplit.getClass().getName());
+        return new VineyardRecordReader(job, (VineyardSplit) genericSplit);
     }
-
-    // @Override
-    // public VectorizedSupport.Support[] getSupportedFeatures() {
-    //     return new VectorizedSupport.Support[] {VectorizedSupport.Support.DECIMAL_64};
-    // }
 
     @Override
     public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
@@ -133,7 +122,7 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, Vectorize
             int partitionBatchSize = table[i].getBatches().size() / partitionSplitCount;
             System.out.println("partitionBatchSize:" + partitionBatchSize);
             for (int j = 0; j < partitionSplitCount; j++) {
-                VineyardSplit vineyardSplit = new VineyardSplit(paths[i], 0, "1 3".getBytes().length, job);
+                VineyardSplit vineyardSplit = new VineyardSplit(paths[i], 0, table[i].getBatch(i).getBatch().getRowCount(), job);
                 System.out.println("split path:" + paths[i].toString());
                 if (j == partitionSplitCount - 1) {
                     vineyardSplit.setBatch(j * partitionBatchSize, table[i].getBatches().size() - j * partitionBatchSize);
@@ -174,26 +163,26 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, Vectorize
     }
 }
 
-class VineyardBatchRecordReader implements RecordReader<NullWritable, VectorizedRowBatch> {
-    private static Logger logger = LoggerFactory.getLogger(VineyardBatchRecordReader.class);
+class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
+    private static Logger logger = LoggerFactory.getLogger(VineyardRecordReader.class);
 
     // vineyard field
-    private IPCClient client;
+    private static IPCClient client;
     private String tableName;
-    private Boolean tableNameValid = false;
-    private VectorSchemaRoot vectorSchemaRoot;
-    private VectorizedRowBatchCtx ctx;
     private Table table;
     private int recordBatchIndex = 0;
     private int recordBatchInnerIndex = 0;
+    private Boolean tableNameValid = false;
+    private VectorSchemaRoot vectorSchemaRoot;
 
     private int batchStartIndex;
     private int batchSize;
 
-    private Object[] partitionValues;
-    private boolean addPartitionCols = true;
+    private TableBuilder tableBuilder;
+    private List<RecordBatchBuilder> recordBatchBuilders;
+    private static RecordBatchBuilder recordBatchBuilder;
 
-    VineyardBatchRecordReader(JobConf job, VineyardSplit split) throws IOException {
+    VineyardRecordReader(JobConf job, VineyardSplit split) {
         System.out.println("VineyardBatchRecordReader");
         String path = split.getPath().toString();
         // int index = path.lastIndexOf("/");
@@ -225,20 +214,14 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
 
         Arrow.instantiate();
         // HiveConf.setVar(job, HiveConf.ConfVars.PLAN, "vineyard:///");
-        System.out.println("flag is :" + HiveConf.getBoolVar(job, HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED));
-        HiveConf.setBoolVar(job, HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED, true);
         System.out.println("Utilities.getPlanPath(conf) is " + Utilities.getPlanPath(job));
         System.out.println("Map work:" + Utilities.getMapWork(job));
-        // ctx = Utilities.getVectorizedRowBatchCtx(job);
-
-        // int partitionColumnCount = ctx.getPartitionColumnCount();
-        // partitionValues = new Object[partitionColumnCount];
-        // VectorizedRowBatchCtx.getPartitionValues(ctx, job, (VineyardSplit)split, partitionValues);
     }
 
     @Override
     public void close() throws IOException {
-        if(client != null && client.connected()) {
+        System.out.printf("closing\n");
+        if(client.connected()) {
             client.disconnect();
             System.out.println("Bye, vineyard!");
         }
@@ -246,116 +229,31 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
 
     @Override
     public NullWritable createKey() {
-        return NullWritable.get();
+        System.out.printf("creating key\n");
+        return null;
     }
 
     @Override
-    public VectorizedRowBatch createValue() {
-        return ctx.createVectorizedRowBatch();
+    public RowWritable createValue() {
+        System.out.printf("creating value\n");
+        return new RowWritable();
     }
 
     @Override
     public long getPos() throws IOException {
+        System.out.printf("get pos\n");
         return 0;
     }
 
     @Override
     public float getProgress() throws IOException {
+        System.out.printf("get progress\n");
         return 0;
     }
 
-    /**
-     * Copy data from the Arrow RecordBatch to the VectorizedRowBatch.
-     *
-     * @param batch the VectorizedRowBatch to copy to
-     */
-    private void arrowToVectorizedRowBatch(VectorizedRowBatch batch) {
-        // batch.numCols = recordBatch.getFieldVectors().size();
-        int remaining = vectorSchemaRoot.getRowCount() - recordBatchInnerIndex;
-        System.out.println("partition column:" + batch.getPartitionColumnCount());
-        System.out.println("Data column count:" + batch.getDataColumnCount());
-
-        /*
-         * When we use SQL with condition to query data, the recordBatchSize may be large than VectorizedRowBatch.DEFAULT_SIZE, 
-         * which will cause ArrayIndexOutOfBoundsException. Because hive use a temporary array to store the data of
-         * VectorizedRowBatch when process condition query, and the size of the array is VectorizedRowBatch.DEFAULT_SIZE
-         * (VectorFilterOperator.java: 102).
-         * So we need to limit the recordBatchSize to VectorizedRowBatch.DEFAULT_SIZE if the recordBatchSize is larger than
-         * VectorizedRowBatch.DEFAULT_SIZE.
-         */
-        int recordBatchSize = remaining <= VectorizedRowBatch.DEFAULT_SIZE ? remaining : VectorizedRowBatch.DEFAULT_SIZE;
-        batch.size = recordBatchSize;
-
-        for (int i = 0; i < vectorSchemaRoot.getSchema().getFields().size(); i++) {
-            Field field = vectorSchemaRoot.getSchema().getFields().get(i);
-            if (field.getType().equals(Arrow.Type.Boolean)) {
-                LongColumnVector vector = new LongColumnVector(batch.size);
-                BitVector bitVector = (BitVector) vectorSchemaRoot.getFieldVectors().get(i);
-                for (int k = 0; k < batch.size; k++) {
-                    vector.vector[k] = bitVector.get(k + recordBatchInnerIndex);
-                }
-                batch.cols[i] = vector;
-            } else if (field.getType().equals(Arrow.Type.Int)) {
-                LongColumnVector vector = new LongColumnVector(batch.size);
-                IntVector intVector = (IntVector) vectorSchemaRoot.getFieldVectors().get(i);
-                for (int k = 0; k < batch.size; k++) {
-                    vector.vector[k] = intVector.get(k + recordBatchInnerIndex);
-                }
-                batch.cols[i] = vector;
-            } else if (field.getType().equals(Arrow.Type.Int64)) {
-                LongColumnVector vector = new LongColumnVector(batch.size);
-                BigIntVector bigIntVector = (BigIntVector) vectorSchemaRoot.getFieldVectors().get(i);
-                for (int k = 0; k < batch.size; k++) {
-                    vector.vector[k] = bigIntVector.get(k + recordBatchInnerIndex);
-                }
-                batch.cols[i] = vector;
-            } else if (field.getType().equals(Arrow.Type.Float)) {
-                DoubleColumnVector vector = new DoubleColumnVector(batch.size);
-                Float4Vector float4Vector = (Float4Vector) vectorSchemaRoot.getFieldVectors().get(i);
-                for (int k = 0; k < batch.size; k++) {
-                    vector.vector[k] = float4Vector.get(k + recordBatchInnerIndex);
-                }
-                batch.cols[i] = vector;
-            } else if (field.getType().equals(Arrow.Type.Double)) {
-                DoubleColumnVector vector = new DoubleColumnVector(batch.size);
-                Float8Vector float8Vector = (Float8Vector) vectorSchemaRoot.getFieldVectors().get(i);
-                for (int k = 0; k < batch.size; k++) {
-                    vector.vector[k] = float8Vector.get(k + recordBatchInnerIndex);
-                }
-                batch.cols[i] = vector;
-            } else if (field.getType().equals(Arrow.Type.LargeVarChar)) {
-                BytesColumnVector vector = new BytesColumnVector(batch.size);
-                LargeVarCharVector largeVarCharVector = (LargeVarCharVector) vectorSchemaRoot.getFieldVectors().get(i);
-                for (int k = 0; k < batch.size; k++) {
-                    vector.isNull[k] = false;
-                    vector.setRef(k, largeVarCharVector.get(k + recordBatchInnerIndex), 0, largeVarCharVector.get(k + recordBatchInnerIndex).length);
-                }
-                batch.cols[i] = vector;
-            } else if (field.getType().equals(Arrow.Type.VarChar)) {
-                BytesColumnVector vector = new BytesColumnVector(batch.size);
-                vector.init();
-                VarCharVector varCharVector = (VarCharVector) vectorSchemaRoot.getFieldVectors().get(i);
-                for (int k = 0; k < batch.size; k++) {
-                    vector.isNull[k] = false;
-                    vector.setRef(k, varCharVector.get(k + recordBatchInnerIndex), 0, varCharVector.get(k + recordBatchInnerIndex).length);
-                }
-                batch.cols[i] = vector;
-            } else {
-                System.out.println("array builder for type " + field.getType() + " is not supported");
-                throw new UnsupportedOperationException("array builder for type " + field.getType() + " is not supported");
-            }
-        }
-        recordBatchInnerIndex += recordBatchSize;
-        if (recordBatchInnerIndex >= vectorSchemaRoot.getRowCount()) {
-            recordBatchInnerIndex = 0;
-            recordBatchIndex++;
-            vectorSchemaRoot = null;
-        }
-    }
-
     @Override
-    public boolean next(NullWritable key, VectorizedRowBatch value) throws IOException {
-        System.out.println("next");
+    public boolean next(NullWritable key, RowWritable value) throws IOException {
+        System.out.printf("next\n");
         if (tableNameValid) {
             if (table == null) {
                 try {
@@ -375,16 +273,17 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
             if (vectorSchemaRoot == null) {
                 vectorSchemaRoot = table.getArrowBatch(recordBatchIndex);
             }
-            if (vectorSchemaRoot == null) {
-                System.out.println("Get vector schema root failed.");
-                return false;
+            Schema schema;
+            schema = vectorSchemaRoot.getSchema();
+            value.constructRow(schema, vectorSchemaRoot, recordBatchInnerIndex);
+            recordBatchInnerIndex += 1;
+            System.out.println("recordBatchInnerIndex:" + recordBatchInnerIndex + " vectorSchemaRoot.getRowCount():" + vectorSchemaRoot.getRowCount());
+            if (recordBatchInnerIndex >= vectorSchemaRoot.getRowCount()) {
+                recordBatchInnerIndex = 0;
+                recordBatchIndex++;
+                vectorSchemaRoot = null;
             }
-
-            if (addPartitionCols) {
-                ctx.addPartitionColsToBatch(value, partitionValues);
-                addPartitionCols = false;
-            }
-            this.arrowToVectorizedRowBatch(value);
+            System.out.println("return true");
             return true;
         }
         return false;

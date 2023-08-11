@@ -14,7 +14,7 @@ services:
                      -Djnr.ffi.asm.enabled=false
                      ${SERVICE_OPTS}'
       HIVE_AUX_JARS_PATH: /opt/hive/auxlib
-      VINEYARD_IPC_SOCKET: /tmp/vineyard.sock
+      VINEYARD_IPC_SOCKET: /tmp/vineyard/vineyard.sock
     networks:
       - hive
     ports:
@@ -22,9 +22,10 @@ services:
     volumes:
       - /user/hive/warehouse:/opt/hive/data/warehouse
       - /user/hive/warehouse:/user/hive/warehouse
+      - ~/performance/spark:/spark
       - ../../java/hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
-      - ../../java/hive/target:/opt/hive/auxlib
-      - ../../build:/tmp
+      - ../../build/vineyard:/tmp/vineyard
+      - ../../share:/opt/hive/auxlib
 
   hive:
     image: apache/hive:2.3.9
@@ -42,7 +43,7 @@ services:
       IS_RESUME: 'true'
       SERVICE_NAME: 'hiveserver2'
       HIVE_AUX_JARS_PATH: '/opt/hive/auxlib'
-      VINEYARD_IPC_SOCKET: /tmp/vineyard.sock
+      VINEYARD_IPC_SOCKET: /tmp/vineyard/vineyard.sock
     networks:
       - hive
     ports:
@@ -51,9 +52,10 @@ services:
     volumes:
       - /user/hive/warehouse:/opt/hive/data/warehouse
       - /user/hive/warehouse:/user/hive/warehouse
+      - ~/performance/spark:/spark
       - ../../java/hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml
       - ../../java/hive/target:/opt/hive/auxlib
-      - ../../build:/tmp
+      - ../../build/vineyard:/tmp/vineyard
 
 networks:
   hive:

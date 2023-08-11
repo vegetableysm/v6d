@@ -164,10 +164,10 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         try {
             fs = finalOutPath.getFileSystem(jc);
             System.out.println("tmp path:" + tmpPath.toString());
-            FSDataOutputStream output = FileSystem.create(fs, tmpPath, new FsPermission("777"));
+            FSDataOutputStream output = FileSystem.create(fs, finalOutPath, new FsPermission("777"));
             if (output != null) {
                 System.out.println("Create succeed!");
-                // output.write("test".getBytes(), 0, 4);
+                output.write("1 3".getBytes(), 0, "1 3".getBytes().length);
                 output.close();
             }
         } catch (Exception e) {

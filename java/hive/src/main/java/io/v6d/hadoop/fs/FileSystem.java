@@ -28,6 +28,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.Options.HandleOpt;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.util.Progressable;
 import org.slf4j.Logger;
@@ -62,6 +63,7 @@ class MockOutputStream extends FSDataOutputStream {
 
     @Override
     public void close() throws IOException {
+      System.out.println("=== close ===");
       super.close();
       DataOutputBuffer buf = (DataOutputBuffer) getWrappedStream();
       file.length = buf.getLength();
@@ -70,6 +72,9 @@ class MockOutputStream extends FSDataOutputStream {
       block.setLength(file.length);
       setBlocks(block);
       System.arraycopy(buf.getData(), 0, file.content, 0, file.length);
+      for (int i = 0; i < buf.getData().length; i++) {
+        System.out.println((int)(buf.getData()[i]));
+      }
     }
 
     @Override
@@ -186,7 +191,7 @@ class VineyardOutputStream extends FSDataOutputStream {
         return new String("vineyard");
     }
 }
-public class FileSystem extends org.apache.hadoop.fs.FileSystem {
+public class FileSystem extends RawLocalFileSystem {
     public static final String SCHEME = "vineyard";
 
     private URI uri = URI.create(SCHEME + ":///");
@@ -219,7 +224,8 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("getUri: " + uri);
         System.out.println("=================");
-        return uri;
+        // return uri;
+        return super.getUri();
     }
 
     @Override
@@ -247,6 +253,8 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("Initialize vineyard file system: " + name);
         System.out.println("=================");
         this.uri = name;
+        // HiveConf.setVar(conf, HiveConf.ConfVars.PLAN, "vineyard:///");
+        super.initialize(name, conf);
     }
 
     @Override
@@ -254,7 +262,8 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("open: " + path.toString());
         System.out.println("=================");
-        return null;
+        Path p = new Path(path.toString().replace("vineyard:", "file:"));
+        return super.open(p, i);
     }
 
       public MockFile findFile(Path path) {
@@ -281,12 +290,14 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("create: " + path.toString());
         System.out.println("=================");
-        MockFile file = findFile(path);
-        if (file == null) {
-            file = new MockFile(path.toString(), (int) blockSize, new byte[0]);
-            files.add(file);
-        }
-        return new MockOutputStream(file);
+        Path p = new Path(path.toString().replace("vineyard:", "file:"));
+        return super.create(p, fsPermission, overwrite, bufferSize, replication, blockSize, progressable);
+        // MockFile file = findFile(path);
+        // if (file == null) {
+        //     file = new MockFile(path.toString(), (int) blockSize, new byte[0]);
+        //     files.add(file);
+        // }
+        // return new MockOutputStream(file);
     }
 
     @Override
@@ -295,7 +306,9 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("append:" + path);
         System.out.println("=================");
-        return null;
+        Path p = new Path(path.toString().replace("vineyard:", "file:"));
+        return super.append(p, i, progressable);
+        // return null;
     }
 
     @Override
@@ -303,7 +316,9 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("rename: " + path + " to " + path1);
         System.out.println("=================");
-        return true;
+        Path p = new Path(path.toString().replace("vineyard:", "file:"));
+        return super.rename(p, path1);
+        // return true;
     }
 
     @Override
@@ -311,7 +326,9 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("delete: " + path);
         System.out.println("=================");
-        return true;
+        Path p = new Path(path.toString().replace("vineyard:", "file:"));
+        return super.delete(p, b);
+        // return true;
     }
 
     @Override
@@ -321,7 +338,9 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         //FileStatus fileStatus = new FileStatus(10, true, 1, 10, 0, path);
         // return null;// new FileStatus[] {fileStatus};
-        return new FileStatus[0];
+        Path p = new Path(path.toString().replace("vineyard:", "file:"));
+        return super.listStatus(p);
+        // return new FileStatus[0];
     }
 
     @Override
@@ -330,6 +349,7 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("setWorkingDirectory: " + path);
         System.out.println("=================");
         workingDir = path;
+        super.setWorkingDirectory(path);
     }
 
     @Override
@@ -345,7 +365,9 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("mkdirs: " + path);
         System.out.println("=================");
-        return true;
+        Path p = new Path(path.toString().replace("vineyard:", "file:"));
+        return super.mkdirs(p, fsPermission);
+        // return true;
     }
 
     private FileStatus createStatus(MockFile file) {
@@ -360,7 +382,7 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     }
 
     private FileStatus createDirectory(Path dir) {
-        return new FileStatus(10, true, 0, 1, 0, 0,
+        return new FileStatus(1, true, 0, 1, 0, 0,
             new FsPermission((short) 777), null, null, dir);
     }
 
@@ -369,21 +391,23 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("getFileStatus: " + path.toString());
         System.out.println("=================");
-        // return new FileStatus(10, true, 1, 10, 0, path);
-        // String pathnameAsDir = path.toString() + "/";
-        if (path.toString().equals("vineyard:/opt/hive/data/warehouse/hive_example")) {
-            return new FileStatus(10, true, 0, 1, 0, 0,
-            new FsPermission((short) 777), null, null, path);
-        }
-        MockFile file = findFile(path);
-        if (file != null)
-            return createStatus(file);
-        // for (MockFile dir : files) {
-            // if (dir.path.toString().startsWith(pathnameAsDir)) {
-        return createDirectory(path);
-            // }
+        Path p = new Path(path.toString().replace("vineyard:", "file:"));
+        return super.getFileLinkStatus(p);
+        // // return new FileStatus(10, true, 1, 10, 0, path);
+        // // String pathnameAsDir = path.toString() + "/";
+        // if (path.toString().equals("vineyard:/opt/hive/data/warehouse/hive_example")) {
+        //     return new FileStatus(1, true, 0, 1, 0, 0,
+        //     new FsPermission((short) 777), null, null, path);
         // }
-        // throw new FileNotFoundException("File " + path + " does not exist");
+        // MockFile file = findFile(path);
+        // if (file != null)
+        //     return createStatus(file);
+        // // for (MockFile dir : files) {
+        //     // if (dir.path.toString().startsWith(pathnameAsDir)) {
+        // return createDirectory(path);
+        //     // }
+        // // }
+        // // throw new FileNotFoundException("File " + path + " does not exist");
     }
 
     @Override
