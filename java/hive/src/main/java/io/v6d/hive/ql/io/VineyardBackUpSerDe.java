@@ -72,6 +72,10 @@ public class VineyardBackUpSerDe extends ArrowColumnarBatchSerDe {
         List<Object> standardObjects = new ArrayList<Object>();
         ObjectInspectorUtils.copyToStandardObject(standardObjects, obj,
             ((StructObjectInspector) objInspector), ObjectInspectorUtils.ObjectInspectorCopyOption.WRITABLE);
+        System.out.println("row length:" + standardObjects.size());
+        for (int i = 0; i < standardObjects.size(); i++) {
+            System.out.println((standardObjects.get(i)));
+        }
         return getRowWritable(standardObjects);
     }
 

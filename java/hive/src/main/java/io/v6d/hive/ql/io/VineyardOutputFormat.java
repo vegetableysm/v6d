@@ -28,7 +28,9 @@ import io.v6d.modules.basic.arrow.RecordBatchBuilder;
 
 import java.io.IOException;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import org.apache.arrow.vector.types.TimeUnit;
@@ -58,8 +60,25 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore.AsyncProcessor.lock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+class SpinLock {
+
+  private AtomicReference<Thread> sign = new AtomicReference<>();
+
+  public void lock(){
+    Thread current = Thread.currentThread();
+
+    while(!sign.compareAndSet(null, current)) {}
+  }
+
+  public void unlock (){
+    Thread current = Thread.currentThread();
+    sign.compareAndSet(current, null);
+  }
+}
 
 public class VineyardOutputFormat<K extends NullWritable, V extends VineyardRowWritable>
         implements HiveOutputFormat<K, V> {
@@ -90,6 +109,9 @@ public class VineyardOutputFormat<K extends NullWritable, V extends VineyardRowW
 }
 
 class SinkRecordWriter implements FileSinkOperator.RecordWriter {
+    private static HashMap<String, SpinLock> locks = new HashMap<String, SpinLock>();
+    private static SpinLock global_lock = new SpinLock();
+
     private JobConf jc;
     private Path finalOutPath;
     private FileSystem fs;
@@ -104,6 +126,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     private SchemaBuilder schemaBuilder;
     RecordBatchBuilder recordBatchBuilder;
     private String tableName;
+    private String[] partitionNames;
 
     public static final PathFilter VINEYARD_FILES_PATH_FILTER = new PathFilter() {
         @Override
@@ -128,6 +151,12 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         //     } while(index != -1);
         // }
         // System.out.println("Partition count:" + partitionCount);
+        String []partitionString = tableProperties.getProperty("partition_columns").split(",");
+        int partitionCount = partitionString.length;
+        partitionNames = new String[partitionCount];
+        for (int i = 0; i < partitionCount; i++) {
+            partitionNames[i] = partitionString[i];
+        }
 
         // Construct table name
         String path = finalOutPath.toString();
@@ -138,9 +167,34 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         if (pathSplits.length == 0) {
             return;
         }
-        tableName = location;
+        // tableName = location;
+        System.out.println("final out path:" + finalOutPath.toString());
 
-        System.out.println("Path:" + path);
+        if (finalOutPath.toString().indexOf("_temporary") - 1 >= 0) {
+            //spark
+            tableName = finalOutPath.toString().substring(0, finalOutPath.toString().indexOf("_temporary") - 1);
+        } else {
+            //hive
+            tableName = location;
+            for (int i = 0; i < partitionCount; i++) {
+                System.out.println("final out path:" + finalOutPath.toString());
+                System.out.println("partition name:" + partitionNames[i]);
+
+                int start = finalOutPath.toString().indexOf(partitionNames[i]);
+                int end = finalOutPath.toString().indexOf("/", start);
+                System.out.println("start:" + start + " end:" + end);
+                if (start >= 0) {
+                    partitionNames[i] = finalOutPath.toString().substring(start, end);
+                    System.out.println("partition name:" + partitionNames[i]);
+                    tableName += "/" + partitionNames[i];
+                } else {
+                    partitionNames[i] = null;
+                }
+            }
+        }
+        //need to support partition
+
+        // System.out.println("Path:" + path);
         //spark
         // for (int i = 1; i < pathSplits.length; i++) {
         //     if (pathSplits[i].length() > 0 && hiddernPathFilter.accept(new Path(pathSplits[i]))) {
@@ -152,6 +206,13 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         //     }
         // }
         tableName = tableName.replaceAll("/", "#");
+
+        global_lock.lock();
+        if (!locks.containsKey(tableName)) {
+            SpinLock lock = new SpinLock();
+            locks.put(tableName, lock);
+        }
+        global_lock.unlock();
         // System.out.println("Table name:" + tableName);
 
         // Create temp file
@@ -183,6 +244,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             boolean isCompressed,
             Properties tableProperties,
             Progressable progress) {
+        System.out.println("Create sink record writer");
         this.jc = jc;
         if (!ArrowWrapperWritable.class.isAssignableFrom(valueClass)) {
             throw new VineyardException.Invalid("value class must be ArrowWrapperWritable");
@@ -216,13 +278,15 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     }
 
     @Override
-    public void write(Writable w) throws IOException {   
+    public void write(Writable w) throws IOException {
+        System.out.println("Write");
         if (w == null) {
             System.out.println("w is null");
             return;
         }
 
         VineyardRowWritable rowWritable = (VineyardRowWritable) w;
+        System.out.println("value:" + (rowWritable.getValues().get(0)) + " " + (rowWritable.getValues().get(1)));
         objects.add(rowWritable);
     }
     
@@ -238,10 +302,14 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             System.out.println("Bye, vineyard!");
             return;
         }
+        System.out.println("objects size:" + objects.size());
 
         // construct record batch
         constructRecordBatch();
         tableBuilder = new TableBuilder(client, schemaBuilder);
+
+        global_lock.lock();
+        locks.get(tableName).lock();
         try {
             ObjectID objectID = client.getName(tableName, false);
             if (objectID == null) {
@@ -268,8 +336,11 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             client.putName(meta.getId(), tableName);
             System.out.println("record batch size:" + tableBuilder.getBatchSize());
         } catch (Exception e) {
+            locks.get(tableName).unlock();
             throw new IOException("Seal TableBuilder failed");
         }
+        locks.get(tableName).unlock();
+        global_lock.unlock();
         client.disconnect();
 
         System.out.println("Bye, vineyard!");
@@ -353,6 +424,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
 
     private void fillRecordBatchBuilder(Schema schema) {
         int rowCount = objects.size();
+        System.out.println("row count:" + rowCount);
         for (int i = 0; i < schema.getFields().size(); i++) {
             ColumnarDataBuilder column;
             try {

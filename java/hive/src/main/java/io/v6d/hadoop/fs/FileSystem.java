@@ -28,11 +28,14 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.Options.HandleOpt;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.util.Progressable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.v6d.core.client.IPCClient;
+import io.v6d.core.common.util.ObjectID;
+import io.v6d.core.common.util.VineyardException;
 
 
 class MockOutputStream extends FSDataOutputStream {
@@ -63,7 +66,6 @@ class MockOutputStream extends FSDataOutputStream {
 
     @Override
     public void close() throws IOException {
-      System.out.println("=== close ===");
       super.close();
       DataOutputBuffer buf = (DataOutputBuffer) getWrappedStream();
       file.length = buf.getLength();
@@ -72,9 +74,6 @@ class MockOutputStream extends FSDataOutputStream {
       block.setLength(file.length);
       setBlocks(block);
       System.arraycopy(buf.getData(), 0, file.content, 0, file.length);
-      for (int i = 0; i < buf.getData().length; i++) {
-        System.out.println((int)(buf.getData()[i]));
-      }
     }
 
     @Override
@@ -176,7 +175,6 @@ class MockFile {
     }
   }
 class VineyardOutputStream extends FSDataOutputStream {
-
     public VineyardOutputStream() throws IOException {
         super(new DataOutputBuffer(100), null);
     }
@@ -191,7 +189,8 @@ class VineyardOutputStream extends FSDataOutputStream {
         return new String("vineyard");
     }
 }
-public class FileSystem extends RawLocalFileSystem {
+public class FileSystem extends org.apache.hadoop.fs.FileSystem {
+    private IPCClient client;
     public static final String SCHEME = "vineyard";
 
     private URI uri = URI.create(SCHEME + ":///");
@@ -199,6 +198,8 @@ public class FileSystem extends RawLocalFileSystem {
 
     final List<MockFile> files = new ArrayList<MockFile>();
     final Map<MockFile, FileStatus> fileStatusMap = new HashMap<>();
+  
+    final Map<Path, ObjectID> fileMap = new HashMap<>();
     Path workingDir = new Path("/");
     public FileSystem() {
         super();
@@ -224,8 +225,7 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("=================");
         System.out.println("getUri: " + uri);
         System.out.println("=================");
-        // return uri;
-        return super.getUri();
+        return uri;
     }
 
     @Override
@@ -253,8 +253,23 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("Initialize vineyard file system: " + name);
         System.out.println("=================");
         this.uri = name;
-        // HiveConf.setVar(conf, HiveConf.ConfVars.PLAN, "vineyard:///");
-        super.initialize(name, conf);
+        // connect to vineyard
+        try {
+          if (client == null) {
+              // TBD: get vineyard socket path from table properties
+              client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
+          }
+          if (client == null || !client.connected()) {
+              throw new VineyardException.Invalid("failed to connect to vineyard");
+          } else {
+              System.out.printf("Connected to vineyard succeed!\n");
+              System.out.printf("Hello vineyard!\n");
+          }
+        } catch (VineyardException e) {
+          System.out.printf("Failed to connect to vineyard!\n");
+          System.out.println(e.getMessage());
+          throw new IOException(e);
+        }
     }
 
     @Override
@@ -262,8 +277,7 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("=================");
         System.out.println("open: " + path.toString());
         System.out.println("=================");
-        Path p = new Path(path.toString().replace("vineyard:", "file:"));
-        return super.open(p, i);
+        return null;
     }
 
       public MockFile findFile(Path path) {
@@ -290,14 +304,15 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("=================");
         System.out.println("create: " + path.toString());
         System.out.println("=================");
-        Path p = new Path(path.toString().replace("vineyard:", "file:"));
-        return super.create(p, fsPermission, overwrite, bufferSize, replication, blockSize, progressable);
-        // MockFile file = findFile(path);
-        // if (file == null) {
-        //     file = new MockFile(path.toString(), (int) blockSize, new byte[0]);
-        //     files.add(file);
-        // }
-        // return new MockOutputStream(file);
+        MockFile file = findFile(path);
+        if (file == null) {
+            file = new MockFile(path.toString(), (int) blockSize, new byte[0]);
+            files.add(file);
+        }
+        if (fileMap.containsKey(path)) {
+          
+        }
+        return new MockOutputStream(file);
     }
 
     @Override
@@ -306,19 +321,29 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("=================");
         System.out.println("append:" + path);
         System.out.println("=================");
-        Path p = new Path(path.toString().replace("vineyard:", "file:"));
-        return super.append(p, i, progressable);
-        // return null;
+        return null;
     }
 
     @Override
     public boolean rename(Path path, Path path1) throws IOException {
         System.out.println("=================");
-        System.out.println("rename: " + path + " to " + path1);
+        System.out.println("rename: " + path.toString() + " to " + path1.toString());
         System.out.println("=================");
-        Path p = new Path(path.toString().replace("vineyard:", "file:"));
-        return super.rename(p, path1);
-        // return true;
+        try {
+          ObjectID objectID = client.getName(path.toString().replaceAll("/", "#"), false);
+          if (objectID == null) {
+            System.out.println("Table not exists!");
+          } else {
+            client.putName(objectID, path1.toString().replaceAll("/", "#"));
+          }
+        } catch (VineyardException e) {
+          if (e instanceof VineyardException.ObjectNotExists) {
+            System.out.println(e.getMessage());
+          } else {
+            return false;
+          }
+        }
+        return true;
     }
 
     @Override
@@ -326,9 +351,7 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("=================");
         System.out.println("delete: " + path);
         System.out.println("=================");
-        Path p = new Path(path.toString().replace("vineyard:", "file:"));
-        return super.delete(p, b);
-        // return true;
+        return true;
     }
 
     @Override
@@ -338,9 +361,7 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("=================");
         //FileStatus fileStatus = new FileStatus(10, true, 1, 10, 0, path);
         // return null;// new FileStatus[] {fileStatus};
-        Path p = new Path(path.toString().replace("vineyard:", "file:"));
-        return super.listStatus(p);
-        // return new FileStatus[0];
+        return new FileStatus[0];
     }
 
     @Override
@@ -349,7 +370,6 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("setWorkingDirectory: " + path);
         System.out.println("=================");
         workingDir = path;
-        super.setWorkingDirectory(path);
     }
 
     @Override
@@ -365,9 +385,7 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("=================");
         System.out.println("mkdirs: " + path);
         System.out.println("=================");
-        Path p = new Path(path.toString().replace("vineyard:", "file:"));
-        return super.mkdirs(p, fsPermission);
-        // return true;
+        return true;
     }
 
     private FileStatus createStatus(MockFile file) {
@@ -382,7 +400,7 @@ public class FileSystem extends RawLocalFileSystem {
     }
 
     private FileStatus createDirectory(Path dir) {
-        return new FileStatus(1, true, 0, 1, 0, 0,
+        return new FileStatus(10, true, 0, 1, 0, 0,
             new FsPermission((short) 777), null, null, dir);
     }
 
@@ -391,23 +409,21 @@ public class FileSystem extends RawLocalFileSystem {
         System.out.println("=================");
         System.out.println("getFileStatus: " + path.toString());
         System.out.println("=================");
-        Path p = new Path(path.toString().replace("vineyard:", "file:"));
-        return super.getFileLinkStatus(p);
-        // // return new FileStatus(10, true, 1, 10, 0, path);
-        // // String pathnameAsDir = path.toString() + "/";
-        // if (path.toString().equals("vineyard:/opt/hive/data/warehouse/hive_example")) {
-        //     return new FileStatus(1, true, 0, 1, 0, 0,
-        //     new FsPermission((short) 777), null, null, path);
+        // return new FileStatus(10, true, 1, 10, 0, path);
+        // String pathnameAsDir = path.toString() + "/";
+        if (path.toString().equals("vineyard:/opt/hive/data/warehouse/hive_example")) {
+            return new FileStatus(10, true, 0, 1, 0, 0,
+            new FsPermission((short) 777), null, null, path);
+        }
+        MockFile file = findFile(path);
+        if (file != null)
+            return createStatus(file);
+        // for (MockFile dir : files) {
+            // if (dir.path.toString().startsWith(pathnameAsDir)) {
+        return createDirectory(path);
+            // }
         // }
-        // MockFile file = findFile(path);
-        // if (file != null)
-        //     return createStatus(file);
-        // // for (MockFile dir : files) {
-        //     // if (dir.path.toString().startsWith(pathnameAsDir)) {
-        // return createDirectory(path);
-        //     // }
-        // // }
-        // // throw new FileNotFoundException("File " + path + " does not exist");
+        // throw new FileNotFoundException("File " + path + " does not exist");
     }
 
     @Override
