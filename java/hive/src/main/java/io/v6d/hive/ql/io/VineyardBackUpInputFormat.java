@@ -99,7 +99,8 @@ public class VineyardBackUpInputFormat extends HiveInputFormat<NullWritable, Row
         int batchSize, realNumSplits;
         int totalRecordBatchCount = 0;
         int partitionsSplitCount[] = new int[table.length];
-        
+
+        System.out.println("numSplits:" + numSplits + " table length:" + table.length);
         if (numSplits <= table.length) {
             realNumSplits = table.length;
             for (int i = 0; i < table.length; i++) {
@@ -122,7 +123,7 @@ public class VineyardBackUpInputFormat extends HiveInputFormat<NullWritable, Row
             int partitionBatchSize = table[i].getBatches().size() / partitionSplitCount;
             System.out.println("partitionBatchSize:" + partitionBatchSize);
             for (int j = 0; j < partitionSplitCount; j++) {
-                VineyardSplit vineyardSplit = new VineyardSplit(paths[i], 0, table[i].getBatch(i).getBatch().getRowCount(), job);
+                VineyardSplit vineyardSplit = new VineyardSplit(paths[i], 0, table[i].getBatch(j).getBatch().getRowCount(), job);
                 System.out.println("split path:" + paths[i].toString());
                 if (j == partitionSplitCount - 1) {
                     vineyardSplit.setBatch(j * partitionBatchSize, table[i].getBatches().size() - j * partitionBatchSize);
@@ -267,6 +268,8 @@ class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
                     return false;
                 }
             }
+            System.out.println("table length:" + table.getBatches().size());
+            System.out.println("recordBatchIndex:" + recordBatchIndex + " batchSize:" + batchSize + " batchStartIndex:" + batchStartIndex);
             if (recordBatchIndex >= batchSize + batchStartIndex) {
                 return false;
             }
@@ -275,9 +278,9 @@ class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
             }
             Schema schema;
             schema = vectorSchemaRoot.getSchema();
+            System.out.println("recordBatchInnerIndex:" + recordBatchInnerIndex + " vectorSchemaRoot.getRowCount():" + vectorSchemaRoot.getRowCount());
             value.constructRow(schema, vectorSchemaRoot, recordBatchInnerIndex);
             recordBatchInnerIndex += 1;
-            System.out.println("recordBatchInnerIndex:" + recordBatchInnerIndex + " vectorSchemaRoot.getRowCount():" + vectorSchemaRoot.getRowCount());
             if (recordBatchInnerIndex >= vectorSchemaRoot.getRowCount()) {
                 recordBatchInnerIndex = 0;
                 recordBatchIndex++;
