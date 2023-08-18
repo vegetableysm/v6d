@@ -27,6 +27,7 @@ import io.v6d.modules.basic.arrow.Arrow;
 import io.v6d.modules.basic.arrow.RecordBatchBuilder;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.ArrayList;
@@ -171,10 +172,34 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         System.out.println("final out path:" + finalOutPath.toString());
 
         if (finalOutPath.toString().indexOf("_temporary") - 1 >= 0) {
-            //spark
+            // spark
+            // Spark will create temporary file/dir with prefix "_temporary", and will rename it to 
+            // table name with partition infomation.
+
             tableName = finalOutPath.toString().substring(0, finalOutPath.toString().indexOf("_temporary") - 1);
+            if (partitionCount > 0 && finalOutPath.toString().indexOf(partitionNames[0] + "=") - 1 >= 0) {
+                tableName = location;
+                for (int i = 0; i < partitionCount; i++) {
+                    System.out.println("final out path:" + finalOutPath.toString());
+                    System.out.println("partition name:" + partitionNames[i]);
+
+                    int start = finalOutPath.toString().indexOf(partitionNames[i]);
+                    int end = finalOutPath.toString().indexOf("/", start);
+                    System.out.println("start:" + start + " end:" + end);
+                    if (start >= 0) {
+                        partitionNames[i] = finalOutPath.toString().substring(start, end);
+                        System.out.println("partition name:" + partitionNames[i]);
+                        tableName += "/" + partitionNames[i];
+                    } else {
+                        partitionNames[i] = null;
+                    }
+                }
+            }
+
+            // tableName = finalOutPath.toString();
         } else {
-            //hive
+            // hive
+            // Hive will create file/dir using table name with partition infomation directly.
             tableName = location;
             for (int i = 0; i < partitionCount; i++) {
                 System.out.println("final out path:" + finalOutPath.toString());
@@ -226,6 +251,8 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             fs = finalOutPath.getFileSystem(jc);
             System.out.println("tmp path:" + tmpPath.toString());
             FSDataOutputStream output = FileSystem.create(fs, finalOutPath, new FsPermission("777"));
+            // String tablePathStr = tableName.replaceAll("#", "/");
+            // FileSystem.mkdirs(fs, new Path(tablePathStr), new FsPermission("777"));
             if (output != null) {
                 System.out.println("Create succeed!");
                 output.write("1 3".getBytes(), 0, "1 3".getBytes().length);

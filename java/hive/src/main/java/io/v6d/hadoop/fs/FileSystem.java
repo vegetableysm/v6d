@@ -16,18 +16,21 @@ package io.v6d.hadoop.fs;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
-import org.apache.hadoop.fs.Options.HandleOpt;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.util.Progressable;
 import org.slf4j.Logger;
@@ -38,145 +41,14 @@ import io.v6d.core.common.util.ObjectID;
 import io.v6d.core.common.util.VineyardException;
 
 
-class MockOutputStream extends FSDataOutputStream {
-    public final MockFile file;
-
-    public MockOutputStream(MockFile file) throws IOException {
-      super(new DataOutputBuffer(), null);
-      this.file = file;
-    }
-
-    /**
-     * Set the blocks and their location for the file.
-     * Must be called after the stream is closed or the block length will be
-     * wrong.
-     * @param blocks the list of blocks
-     */
-    public void setBlocks(MockBlock... blocks) {
-      file.blocks = blocks;
-      int offset = 0;
-      int i = 0;
-      while (offset < file.length && i < blocks.length) {
-        blocks[i].offset = offset;
-        blocks[i].length = Math.min(file.length - offset, file.blockSize);
-        offset += blocks[i].length;
-        i += 1;
-      }
-    }
-
-    @Override
-    public void close() throws IOException {
-      super.close();
-      DataOutputBuffer buf = (DataOutputBuffer) getWrappedStream();
-      file.length = buf.getLength();
-      file.content = new byte[file.length];
-      MockBlock block = new MockBlock("host1");
-      block.setLength(file.length);
-      setBlocks(block);
-      System.arraycopy(buf.getData(), 0, file.content, 0, file.length);
-    }
-
-    @Override
-    public String toString() {
-      return "Out stream to " + file.toString();
-    }
-  }
-
-class MockBlock {
-    int offset;
-    int length;
-    final String[] hosts;
-
-    public MockBlock(String... hosts) {
-      this.hosts = hosts;
-    }
-
-    public void setOffset(int offset) {
-      this.offset = offset;
-    }
-
-    public void setLength(int length) {
-      this.length = length;
-    }
-
-    @Override
-    public String toString() {
-      StringBuilder buffer = new StringBuilder();
-      buffer.append("block{offset: ");
-      buffer.append(offset);
-      buffer.append(", length: ");
-      buffer.append(length);
-      buffer.append(", hosts: [");
-      for(int i=0; i < hosts.length; i++) {
-        if (i != 0) {
-          buffer.append(", ");
-        }
-        buffer.append(hosts[i]);
-      }
-      buffer.append("]}");
-      return buffer.toString();
-    }
-  }
-
-class MockFile {
-    public final Path path;
-    public int blockSize;
-    public int length;
-    public MockBlock[] blocks;
-    public byte[] content;
-    public boolean cannotDelete = false;
-    // This is purely for testing convenience; has no bearing on FS operations such as list.
-    public boolean isDeleted = false;
-
-    public MockFile(String path, int blockSize, byte[] content,
-                    MockBlock... blocks) {
-      this.path = new Path(path);
-      this.blockSize = blockSize;
-      this.blocks = blocks;
-      this.content = content;
-      this.length = content.length;
-      int offset = 0;
-      for(MockBlock block: blocks) {
-        block.offset = offset;
-        block.length = Math.min(length - offset, blockSize);
-        offset += block.length;
-      }
-    }
-
-    @Override
-    public int hashCode() {
-      return path.hashCode() + 31 * length;
-    }
-
-    @Override
-    public boolean equals(final Object obj) {
-      if (!(obj instanceof MockFile)) { return false; }
-      return ((MockFile) obj).path.equals(this.path) && ((MockFile) obj).length == this.length;
-    }
-
-    @Override
-    public String toString() {
-      StringBuilder buffer = new StringBuilder();
-      buffer.append("mockFile{path: ");
-      buffer.append(path.toString());
-      buffer.append(", blkSize: ");
-      buffer.append(blockSize);
-      buffer.append(", len: ");
-      buffer.append(length);
-      buffer.append(", blocks: [");
-      for(int i=0; i < blocks.length; i++) {
-        if (i != 0) {
-          buffer.append(", ");
-        }
-        buffer.append(blocks[i]);
-      }
-      buffer.append("]}");
-      return buffer.toString();
-    }
-  }
 class VineyardOutputStream extends FSDataOutputStream {
-    public VineyardOutputStream() throws IOException {
+    File file;
+    byte[] content = new byte[255];
+    int pos = 0;
+
+    public VineyardOutputStream(File file) throws IOException {
         super(new DataOutputBuffer(100), null);
+        this.file = file;
     }
 
     @Override
@@ -188,6 +60,112 @@ class VineyardOutputStream extends FSDataOutputStream {
     public String toString() {
         return new String("vineyard");
     }
+
+    @Override
+    public void write(int b) throws IOException {
+        System.out.println("write:" + b);
+        content[pos++] = (byte) (b & 0xff);
+        System.out.println("out file:" + this.file.getFileStatus().getPath().toString());
+        System.out.println("content" + this.content.toString());
+    }
+
+    @Override
+    public void write(byte b[], int off, int len) throws IOException {
+        System.out.println("write:" + b + " off:" + off + " len:" + len);
+        System.out.println("out file:" + this.file.getFileStatus().getPath().toString());
+        for (int i = 0; i < len; i++) {
+            content[pos++] = b[off + i];
+            if (pos > content.length) {
+                throw new IOException("content too long");
+            }
+        }
+        System.out.println("content" + this.content.toString());
+    }
+}
+
+class VineyardInputStream extends FSInputStream {
+    File file;
+    int offset = 0;
+    int length = 1;
+    byte[] content;
+
+    public VineyardInputStream(File file) throws IOException {
+      this.file = file;
+      String pathStr = file.getFileStatus().getPath().toString();
+      pathStr = pathStr.substring(pathStr.indexOf(":") + 1);
+      String tableName = pathStr.replaceAll("//", "/");
+      content = tableName.getBytes();
+    }
+
+    @Override
+    public void seek(long offset) throws IOException {
+      this.offset = (int) offset;
+    }
+
+    @Override
+    public long getPos() throws IOException {
+      return offset;
+    }
+
+    @Override
+    public boolean seekToNewSource(long l) throws IOException {
+      return false;
+    }
+
+    @Override
+    public int read() throws IOException {
+        System.out.println("read:" + offset + " length:" + this.length);
+        System.out.println("read from:" + file.getFileStatus().getPath().toString());
+        if (offset < this.length) {
+            return this.content[offset++] & 0xff;
+        }
+      return -1;
+    }
+}
+
+class File {
+    boolean isDir;
+    FileStatus fileStatus;
+    VineyardOutputStream outputStream;
+
+    public File(boolean isDir, FileStatus fileStatus) {
+        this.isDir = isDir;
+        this.fileStatus = fileStatus;
+    }
+
+    public boolean getIsDir() {
+        return isDir;
+    }
+
+    public FileStatus getFileStatus() {
+        return fileStatus;
+    }
+
+    public void setFileStatus(FileStatus fileStatus) {
+        this.fileStatus = fileStatus;
+    }
+
+    public VineyardOutputStream getOutputStream() {
+        return outputStream;
+    }
+}
+
+class SpinLock {
+
+    private AtomicReference<Thread> sign = new AtomicReference<>();
+
+    public void lock(){
+        System.out.println("lock!");
+        Thread current = Thread.currentThread();
+
+        while(!sign.compareAndSet(null, current)) {}
+    }
+
+    public void unlock (){
+        System.out.println("unlock!");
+        Thread current = Thread.currentThread();
+        sign.compareAndSet(current, null);
+    }
 }
 public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     private IPCClient client;
@@ -196,20 +174,22 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     private URI uri = URI.create(SCHEME + ":///");
     private static Logger logger = LoggerFactory.getLogger(FileSystem.class);
 
-    final List<MockFile> files = new ArrayList<MockFile>();
-    final Map<MockFile, FileStatus> fileStatusMap = new HashMap<>();
-  
-    final Map<Path, ObjectID> fileMap = new HashMap<>();
+    final static Map<String, File>fileMap = new HashMap<String, File>();
+    final static SpinLock lock = new SpinLock();
+    private Configuration conf;
+ 
     Path workingDir = new Path("/");
     public FileSystem() {
         super();
     }
 
-    public FileSystem(final URI uri, final Configuration conf) {
-        super();
-        System.out.println("=================");
-        System.out.println("VineyardFileSystem: " + uri);
-        System.out.println("=================");
+    public void printAllFile()
+    {
+        System.out.println("print all file:");
+        System.out.println("Isdir   Path");
+        for (String key : fileMap.keySet()) {
+            System.out.println(fileMap.get(key).getIsDir() +  " path:" + fileMap.get(key).getFileStatus().getPath().toString());
+        }
     }
 
     @Override
@@ -247,29 +227,30 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     @Override
     public void initialize(URI name, Configuration conf) throws IOException {
         super.initialize(name, conf);
+        this.conf = conf;
 
         System.out.println("=================");
-        logger.info("Initialize vineyard file system: {}", name);
         System.out.println("Initialize vineyard file system: " + name);
-        System.out.println("=================");
         this.uri = name;
+        mkdirs(new Path(uri.toString().replaceAll("///", "/")));
         // connect to vineyard
         try {
-          if (client == null) {
-              // TBD: get vineyard socket path from table properties
-              client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
-          }
-          if (client == null || !client.connected()) {
-              throw new VineyardException.Invalid("failed to connect to vineyard");
-          } else {
-              System.out.printf("Connected to vineyard succeed!\n");
-              System.out.printf("Hello vineyard!\n");
-          }
+            if (client == null) {
+                // TBD: get vineyard socket path from table properties
+                client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
+            }
+            if (client == null || !client.connected()) {
+                throw new VineyardException.Invalid("failed to connect to vineyard");
+            } else {
+                System.out.printf("Connected to vineyard succeed!\n");
+                System.out.printf("Hello vineyard!\n");
+            }
         } catch (VineyardException e) {
-          System.out.printf("Failed to connect to vineyard!\n");
-          System.out.println(e.getMessage());
-          throw new IOException(e);
+            System.out.printf("Failed to connect to vineyard!\n");
+            System.out.println(e.getMessage());
+            throw new IOException(e);
         }
+        System.out.println("=================");
     }
 
     @Override
@@ -277,42 +258,71 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("open: " + path.toString());
         System.out.println("=================");
-        return null;
+        String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
+        pathStr = pathStr.replaceAll("//", "/");
+        if (!fileMap.containsKey(pathStr)) {
+            System.out.println("File not exists!");
+            throw new FileNotFoundException();
+        }
+        File file = fileMap.get(pathStr);
+        return new FSDataInputStream(new VineyardInputStream(file));
     }
 
-      public MockFile findFile(Path path) {
-        for (MockFile file: files) {
-            if (file.path.equals(path)) {
-                System.out.println("find");
-                return file;
-            }
-        }
-    // for (MockFile file: globalFiles) {
-    //   if (file.path.equals(path)) {
-    //     return file;
-    //   }
-    // }
-    return null;
-  }
-
-    @Override
+  @Override
     public FSDataOutputStream create(Path path, FsPermission fsPermission,
                                     boolean overwrite, int bufferSize,
                                     short replication, long blockSize,
                                     Progressable progressable
                                     ) throws IOException {
+        return create(path, fsPermission, overwrite, bufferSize, replication, blockSize, progressable, false);
+    }
+
+    private FSDataOutputStream create(Path path, FsPermission fsPermission,
+                                    boolean overwrite, int bufferSize,
+                                    short replication, long blockSize,
+                                    Progressable progressable, boolean locked
+                                    ) throws IOException {
         System.out.println("=================");
         System.out.println("create: " + path.toString());
+        
+        String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
+        pathStr = pathStr.replaceAll("//", "/");
+        if (!locked) {
+            lock.lock();
+        }
+        if (fileMap.containsKey(pathStr)) {
+            System.out.println("File exists, delete!");
+            fileMap.remove(pathStr);
+        }
+        System.out.println("create!");
+        File f = new File(false, new FileStatus(0, false, 1, 1, 0, 0,
+        new FsPermission((short) 777), null, null,
+        path));
+        fileMap.put(pathStr, f);
+        
+        String[] pathList = pathStr.split("/");
+        String dir = "";
+        for (int i = 0; i < pathList.length; i++) {
+            if (pathList[i].length() == 0) {
+                continue;
+            }
+            dir += "/" + pathList[i];
+            if (fileMap.containsKey(dir)) {
+                continue;
+            }
+            
+            File dirFile = new File(true, new FileStatus(1, true, 1, 1, 0, 0,
+            new FsPermission((short) 777), null, null,
+            new Path(SCHEME + ":/" + dir)));
+            fileMap.put(dir, dirFile);
+        }
+        FSDataOutputStream result = new FSDataOutputStream(new VineyardOutputStream(f), null);
+        printAllFile();
+        if (!locked) {
+            lock.unlock();
+        }
         System.out.println("=================");
-        MockFile file = findFile(path);
-        if (file == null) {
-            file = new MockFile(path.toString(), (int) blockSize, new byte[0]);
-            files.add(file);
-        }
-        if (fileMap.containsKey(path)) {
-          
-        }
-        return new MockOutputStream(file);
+        return result;
     }
 
     @Override
@@ -325,31 +335,100 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     }
 
     @Override
-    public boolean rename(Path path, Path path1) throws IOException {
-        System.out.println("=================");
-        System.out.println("rename: " + path.toString() + " to " + path1.toString());
-        System.out.println("=================");
-        try {
-          ObjectID objectID = client.getName(path.toString().replaceAll("/", "#"), false);
-          if (objectID == null) {
-            System.out.println("Table not exists!");
-          } else {
-            client.putName(objectID, path1.toString().replaceAll("/", "#"));
-          }
-        } catch (VineyardException e) {
-          if (e instanceof VineyardException.ObjectNotExists) {
-            System.out.println(e.getMessage());
-          } else {
-            return false;
-          }
-        }
-        return true;
+    public boolean delete(Path path, boolean b) throws IOException {
+      return this.delete(path, b, false);
     }
 
+
     @Override
-    public boolean delete(Path path, boolean b) throws IOException {
+    public boolean rename(Path path, Path path1) throws IOException {
+        // now we create the new file and delete old file to simulate rename
+        System.out.println("=================");
+        System.out.println("rename: " + path.toString() + " to " + path1.toString());
+        
+        String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
+        String pathStr1 = path1.toString().substring(path1.toString().indexOf(":") + 1);
+        pathStr = pathStr.replaceAll("//", "/");
+        pathStr1 = pathStr1.replaceAll("//", "/");
+        List<String> deleteList = new ArrayList<String>();
+        List<String> addList = new ArrayList<String>();
+        
+        lock.lock();
+        for (String key : fileMap.keySet()) {
+            if (key.startsWith(pathStr) && (key.length() == pathStr.length() || key.substring(pathStr.length()).charAt(0) == '/')) {
+                System.out.println("find:" + key);
+                deleteList.add(key);
+                addList.add(pathStr1 + key.substring(pathStr.length()));
+                System.out.println("prepare change :" + key + " to :" + pathStr1 + key.substring(pathStr.length()));
+            }
+        }
+        
+        //delete old file and create new file
+        for (int i = 0; i < deleteList.size(); i++) {
+            File file = fileMap.get(deleteList.get(i));
+            if (file == null) {
+                System.out.println("WTF?");
+                continue;
+            }
+            if (!file.getIsDir()) {
+                create(new Path("vineyard:" + addList.get(i)), null, false, 0, (short) 0, 0, null, true);
+                System.out.println("rename create done");
+            } else {
+                mkdirs(new Path("vineyard:" + addList.get(i)), new FsPermission((short) 777), true);
+                System.out.println("rename mkdir done");
+            }
+        }
+
+        this.delete(path, false, true);
+        System.out.println("rename done");
+        lock.unlock();
+        
+        String tableName = path.toString().replaceAll("/", "#");
+        if (tableName.length() > 0) {
+            try {
+                System.out.println("rename table:" + tableName);
+                ObjectID objectID = client.getName(tableName, false);
+                if (objectID == null) {
+                    System.out.println("Table not exists!");
+                } else {
+                    client.putName(objectID, path1.toString().replaceAll("/", "#"));
+                }
+            } catch (Exception e) {
+                if (e instanceof VineyardException.ObjectNotExists) {
+                    System.out.println(e.getMessage());
+                } else {
+                    System.out.println("return true 1");
+                    System.out.println("=================");
+                    return true;
+                }
+            }
+        }
+        System.out.println("return true 2");
+        System.out.println("=================");
+        return true;
+    }
+    
+    private boolean delete(Path path, boolean b, boolean locked) throws IOException {
         System.out.println("=================");
         System.out.println("delete: " + path);
+        String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
+        pathStr = pathStr.replaceAll("//", "/");
+        if (!locked) {
+            lock.lock();
+        }
+        List<String> deleteList = new ArrayList<String>();
+        for (String key : fileMap.keySet()) {
+            if (key.startsWith(pathStr) && (key.length() == pathStr.length() || key.substring(pathStr.length()).charAt(0) == '/')) {
+                deleteList.add(key);
+            }
+        }
+        for (int i = 0; i < deleteList.size(); i++) {
+            fileMap.remove(deleteList.get(i));
+        }
+        printAllFile();
+        if (!locked) {
+            lock.unlock();
+        }
         System.out.println("=================");
         return true;
     }
@@ -358,10 +437,26 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     public FileStatus[] listStatus(Path path) throws FileNotFoundException, IOException {
         System.out.println("=================");
         System.out.println("listStatus: " + path);
+        printAllFile();
+        
+        List<FileStatus> result = new ArrayList<FileStatus>();
+        String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
+        pathStr = pathStr.replaceAll("//", "/");
+        lock.lock();
+        System.out.println("pathStr:" + pathStr);
+        for (String key : fileMap.keySet()) {
+            System.out.println("key:" + key);
+            if (key.startsWith(pathStr) && key.length() > pathStr.length() && key.substring(pathStr.length()).charAt(0) == '/') {
+                if (key.substring(pathStr.length()).split("/").length == 2) {
+                    System.out.println("find key:" + key);
+                    result.add(fileMap.get(key).getFileStatus());
+                }
+            }
+        }
+        lock.unlock();
+        System.out.println("Find num:"  + result.size());
         System.out.println("=================");
-        //FileStatus fileStatus = new FileStatus(10, true, 1, 10, 0, path);
-        // return null;// new FileStatus[] {fileStatus};
-        return new FileStatus[0];
+        return result.toArray(new FileStatus[result.size()]);
     }
 
     @Override
@@ -382,26 +477,51 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
 
     @Override
     public boolean mkdirs(Path path, FsPermission fsPermission) throws IOException {
+        return this.mkdirs(path, fsPermission, false);
+    }
+
+
+    private boolean mkdirs(Path path, FsPermission fsPermission, boolean locked) throws IOException {
         System.out.println("=================");
         System.out.println("mkdirs: " + path);
+
+        // create dir with path and all parent dir
+        String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
+        pathStr = pathStr.replaceAll("//", "/");
+        if (!locked) {
+            lock.lock();
+        }
+        if (!fileMap.containsKey(pathStr)) {
+            System.out.println("Dir not exists, create!");
+            File file = new File(true, new FileStatus(1, true, 1, 1, 0, 0,
+            new FsPermission((short) 777), null, null,
+            path));
+            // System.out.println("Dir name:" + pathStr);
+            fileMap.put(pathStr, file);
+            
+            String[] pathList = pathStr.split("/");
+            String dir = "";
+            for (int i = 0; i < pathList.length; i++) {
+                if (pathList[i].length() == 0) {
+                    continue;
+                }
+                dir += "/" + pathList[i];
+                if (fileMap.containsKey(dir)) {
+                    continue;
+                }
+                file = new File(true, new FileStatus(1, true, 1, 1, 0, 0,
+                new FsPermission((short) 777), null, null,
+                new Path(SCHEME + ":/" + dir)));
+                fileMap.put(dir, file);
+            }
+            
+            printAllFile();
+        }
+        if (!locked) {
+            lock.unlock();
+        }
         System.out.println("=================");
         return true;
-    }
-
-    private FileStatus createStatus(MockFile file) {
-        if (fileStatusMap.containsKey(file)) {
-            return fileStatusMap.get(file);
-        }
-        FileStatus fileStatus = new FileStatus(file.length, false, 1, file.blockSize, 0, 0,
-            new FsPermission((short) 777), null, null,
-            file.path);
-        fileStatusMap.put(file, fileStatus);
-        return fileStatus;
-    }
-
-    private FileStatus createDirectory(Path dir) {
-        return new FileStatus(10, true, 0, 1, 0, 0,
-            new FsPermission((short) 777), null, null, dir);
     }
 
     @Override
@@ -409,21 +529,33 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         System.out.println("=================");
         System.out.println("getFileStatus: " + path.toString());
         System.out.println("=================");
-        // return new FileStatus(10, true, 1, 10, 0, path);
-        // String pathnameAsDir = path.toString() + "/";
-        if (path.toString().equals("vineyard:/opt/hive/data/warehouse/hive_example")) {
-            return new FileStatus(10, true, 0, 1, 0, 0,
-            new FsPermission((short) 777), null, null, path);
+
+        String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
+        pathStr = pathStr.replaceAll("//", "/");
+
+        FileStatus result = null;
+        lock.lock();
+        if (fileMap.containsKey(pathStr)) {
+            System.out.println("File exists, return!");
+            result =  fileMap.get(pathStr).getFileStatus();
+            printAllFile();
+            lock.unlock();
+            return result;
         }
-        MockFile file = findFile(path);
-        if (file != null)
-            return createStatus(file);
-        // for (MockFile dir : files) {
-            // if (dir.path.toString().startsWith(pathnameAsDir)) {
-        return createDirectory(path);
-            // }
-        // }
-        // throw new FileNotFoundException("File " + path + " does not exist");
+        int stageDirIndex = pathStr.indexOf(HiveConf.getVar(conf, HiveConf.ConfVars.STAGINGDIR));
+        if (stageDirIndex >= 0 && pathStr.substring(stageDirIndex).split("/").length == 1) {
+            System.out.println("Staging dir not exists, create file as dir!");
+            File file = new File(true, new FileStatus(1, true, 1, 1, 0, 0,
+                new FsPermission((short) 777), null, null,
+                path));
+            fileMap.put(pathStr, file);
+            printAllFile();
+            lock.unlock();
+            return file.getFileStatus();
+        }
+        System.out.println("return null");
+        lock.unlock();
+        throw new FileNotFoundException();
     }
 
     @Override
@@ -435,20 +567,82 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         return new byte[0];
     }
 
-    // @Override
-    // public BlockLocation[] getFileBlockLocations(FileStatus file,
-    //   long start, long len) throws IOException {
-    //     System.out.println("=================");
-    //     System.out.println("getFileBlockLocations: " + file);
-    //     System.out.println("=================");
-    //     return new BlockLocation[0];
-    // }
+    @Override
+    public void copyFromLocalFile(Path src, Path dst)
+        throws IOException {
+        System.out.println("=================");
+        System.out.println("copyFromLocalFile1: " + src + " to " + dst);
+        System.out.println("=================");
+    }
 
-    // @Override
-    // public FsServerDefaults getServerDefaults() throws IOException {
-    //     System.out.println("=================");
-    //     System.out.println("getServerDefaults: ");
-    //     System.out.println("=================");
-    //     return null;
-    // }
+    @Override
+    public void moveFromLocalFile(Path[] srcs, Path dst)
+      throws IOException {
+        System.out.println("=================");
+        System.out.println("moveFromLocalFile2: " + srcs + " to " + dst);
+        System.out.println("=================");
+    }
+    @Override
+    public void moveFromLocalFile(Path src, Path dst)
+      throws IOException {
+        System.out.println("=================");
+        System.out.println("moveFromLocalFile3: " + src + " to " + dst);
+        System.out.println("=================");
+    }
+
+    @Override
+    public void copyFromLocalFile(boolean delSrc, Path src, Path dst)
+    throws IOException {
+        System.out.println("=================");
+        System.out.println("copyFromLocalFile4: " + src + " to " + dst);
+        System.out.println("=================");
+    }
+    @Override
+    public void copyFromLocalFile(boolean delSrc, boolean overwrite,
+                                Path[] srcs, Path dst)
+    throws IOException {
+        System.out.println("=================");
+        System.out.println("copyFromLocalFile5: " + srcs + " to " + dst);
+        System.out.println("=================");
+    }
+  
+    @Override
+  public void copyFromLocalFile(boolean delSrc, boolean overwrite,
+                                Path src, Path dst)
+    throws IOException {
+        System.out.println("=================");
+        System.out.println("copyFromLocalFile6: " + src + " to " + dst);
+        System.out.println("=================");
+    }
+
+  @Override
+  public void copyToLocalFile(Path src, Path dst) throws IOException {
+        System.out.println("=================");
+        System.out.println("copyToLocalFile7: " + src + " to " + dst);
+        System.out.println("=================");
+  }
+
+
+  @Override
+  public void moveToLocalFile(Path src, Path dst) throws IOException {
+        System.out.println("=================");
+        System.out.println("moveToLocalFile8: " + src + " to " + dst);
+        System.out.println("=================");
+  }
+
+  @Override
+  public void copyToLocalFile(boolean delSrc, Path src, Path dst)
+    throws IOException {
+        System.out.println("=================");
+        System.out.println("copyToLocalFile9: " + src + " to " + dst);
+        System.out.println("=================");
+  }
+
+  @Override
+  public void copyToLocalFile(boolean delSrc, Path src, Path dst,
+      boolean useRawLocalFileSystem) throws IOException {
+        System.out.println("=================");
+        System.out.println("copyToLocalFile10: " + src + " to " + dst);
+        System.out.println("=================");
+  }
 }
