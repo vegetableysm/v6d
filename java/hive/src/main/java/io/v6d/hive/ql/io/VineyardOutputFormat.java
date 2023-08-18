@@ -176,46 +176,49 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             // Spark will create temporary file/dir with prefix "_temporary", and will rename it to 
             // table name with partition infomation.
 
-            tableName = finalOutPath.toString().substring(0, finalOutPath.toString().indexOf("_temporary") - 1);
-            if (partitionCount > 0 && finalOutPath.toString().indexOf(partitionNames[0] + "=") - 1 >= 0) {
-                tableName = location;
-                for (int i = 0; i < partitionCount; i++) {
-                    System.out.println("final out path:" + finalOutPath.toString());
-                    System.out.println("partition name:" + partitionNames[i]);
+            // tableName = finalOutPath.toString().substring(0, finalOutPath.toString().indexOf("_temporary") - 1);
+            // if (partitionCount > 0 && finalOutPath.toString().indexOf(partitionNames[0] + "=") - 1 >= 0) {
+            //     tableName = location;
+            //     for (int i = 0; i < partitionCount; i++) {
+            //         System.out.println("final out path:" + finalOutPath.toString());
+            //         System.out.println("partition name:" + partitionNames[i]);
 
-                    int start = finalOutPath.toString().indexOf(partitionNames[i]);
-                    int end = finalOutPath.toString().indexOf("/", start);
-                    System.out.println("start:" + start + " end:" + end);
-                    if (start >= 0) {
-                        partitionNames[i] = finalOutPath.toString().substring(start, end);
-                        System.out.println("partition name:" + partitionNames[i]);
-                        tableName += "/" + partitionNames[i];
-                    } else {
-                        partitionNames[i] = null;
-                    }
-                }
-            }
+            //         int start = finalOutPath.toString().indexOf(partitionNames[i]);
+            //         int end = finalOutPath.toString().indexOf("/", start);
+            //         System.out.println("start:" + start + " end:" + end);
+            //         if (start >= 0) {
+            //             partitionNames[i] = finalOutPath.toString().substring(start, end);
+            //             System.out.println("partition name:" + partitionNames[i]);
+            //             tableName += "/" + partitionNames[i];
+            //         } else {
+            //             partitionNames[i] = null;
+            //         }
+            //     }
+            // }
 
-            // tableName = finalOutPath.toString();
+            tableName = finalOutPath.toString();
+            tableName = tableName.substring(0, tableName.lastIndexOf("/"));
         } else {
             // hive
             // Hive will create file/dir using table name with partition infomation directly.
-            tableName = location;
-            for (int i = 0; i < partitionCount; i++) {
-                System.out.println("final out path:" + finalOutPath.toString());
-                System.out.println("partition name:" + partitionNames[i]);
+            // tableName = location;
+            // for (int i = 0; i < partitionCount; i++) {
+            //     System.out.println("final out path:" + finalOutPath.toString());
+            //     System.out.println("partition name:" + partitionNames[i]);
 
-                int start = finalOutPath.toString().indexOf(partitionNames[i]);
-                int end = finalOutPath.toString().indexOf("/", start);
-                System.out.println("start:" + start + " end:" + end);
-                if (start >= 0) {
-                    partitionNames[i] = finalOutPath.toString().substring(start, end);
-                    System.out.println("partition name:" + partitionNames[i]);
-                    tableName += "/" + partitionNames[i];
-                } else {
-                    partitionNames[i] = null;
-                }
-            }
+            //     int start = finalOutPath.toString().indexOf(partitionNames[i]);
+            //     int end = finalOutPath.toString().indexOf("/", start);
+            //     System.out.println("start:" + start + " end:" + end);
+            //     if (start >= 0) {
+            //         partitionNames[i] = finalOutPath.toString().substring(start, end);
+            //         System.out.println("partition name:" + partitionNames[i]);
+            //         tableName += "/" + partitionNames[i];
+            //     } else {
+            //         partitionNames[i] = null;
+            //     }
+            // }
+            tableName = finalOutPath.toString();
+            tableName = tableName.substring(0, tableName.lastIndexOf("/"));
         }
         //need to support partition
 
@@ -231,6 +234,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         //     }
         // }
         tableName = tableName.replaceAll("/", "#");
+        System.out.println("tableName :" + tableName);
 
         global_lock.lock();
         if (!locks.containsKey(tableName)) {
@@ -255,7 +259,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             // FileSystem.mkdirs(fs, new Path(tablePathStr), new FsPermission("777"));
             if (output != null) {
                 System.out.println("Create succeed!");
-                output.write("1 3".getBytes(), 0, "1 3".getBytes().length);
+                output.write((tableName).getBytes(StandardCharsets.UTF_8), 0, (tableName).getBytes(StandardCharsets.UTF_8).length);
                 output.close();
             }
         } catch (Exception e) {
@@ -348,11 +352,11 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             System.out.println("Get table id failed");
         }
 
-        if (oldTable != null) {
-            for (int i = 0; i < oldTable.getBatches().size(); i++) {
-                tableBuilder.addBatch(oldTable.getBatches().get(i));
-            }
-        }
+        // if (oldTable != null) {
+        //     for (int i = 0; i < oldTable.getBatches().size(); i++) {
+        //         tableBuilder.addBatch(oldTable.getBatches().get(i));
+        //     }
+        // }
 
         tableBuilder.addBatch(recordBatchBuilder);
         try {

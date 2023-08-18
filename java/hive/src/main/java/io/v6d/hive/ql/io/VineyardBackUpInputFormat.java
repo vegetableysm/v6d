@@ -262,6 +262,7 @@ class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
                     ObjectID objectID = client.getName(tableName, false);
                     if (objectID != null)
                         System.out.println("get object done");
+                    System.out.println("Table Id:" + objectID.value());
                     table = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(objectID));
                 } catch (Exception e) {
                     System.out.println("Get objectID failed.");
