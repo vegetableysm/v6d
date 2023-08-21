@@ -78,18 +78,19 @@ class VineyardOutputStream extends FSDataOutputStream {
             return;
         }
 
-        String oldTableName = file.getFileStatus().getPath().toString().replaceAll("//", "/");
-        if (oldTableName.length() == 0 || oldTableName.lastIndexOf("/") < -1) {
+        String newTableName = file.getFileStatus().getPath().toString().replaceAll("//", "/");
+        if (newTableName.length() == 0 || newTableName.lastIndexOf("/") < -1) {
             return;
         }
-        oldTableName = oldTableName.substring(0, oldTableName.lastIndexOf("/")).replaceAll("/", "#");
+        newTableName = newTableName.substring(0, newTableName.lastIndexOf("/")).replaceAll("/", "#");
+        System.out.println("New table name:" + newTableName);
 
         try {
-            ObjectID oldTableID = client.getName(oldTableName, false);
+            ObjectID oldTableID = client.getName(tableName, false);
             if (oldTableID == null) {
                 System.out.println("Table not exist.");
             }
-            client.putName(oldTableID, tableName);
+            client.putName(oldTableID, newTableName);
         } catch (Exception e) {
             System.out.println("Get table id failed");
         }
@@ -113,6 +114,7 @@ class VineyardOutputStream extends FSDataOutputStream {
     @Override
     public void write(byte b[], int off, int len) throws IOException {
         System.out.println("write:" + new String(b, StandardCharsets.UTF_8) + " off:" + off + " len:" + len + " pos:" + pos);
+        System.out.println("current file:" + file.getFileStatus().getPath());
         // System.out.println("out file:" + this.file.getFileStatus().getPath().toString());
         content = new byte[pos + len];
         for (int i = 0; i < len; i++) {
