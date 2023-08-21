@@ -14,15 +14,12 @@
  */
 package io.v6d.hive.ql.io;
 
-import io.v6d.core.common.util.ObjectID;
 import io.v6d.core.common.util.VineyardException;
 import io.v6d.core.client.IPCClient;
-import io.v6d.core.client.ds.ObjectFactory;
 import io.v6d.core.client.ds.ObjectMeta;
 import io.v6d.modules.basic.arrow.TableBuilder;
 import io.v6d.modules.basic.columnar.ColumnarDataBuilder;
 import io.v6d.modules.basic.arrow.SchemaBuilder;
-import io.v6d.modules.basic.arrow.Table;
 import io.v6d.modules.basic.arrow.Arrow;
 import io.v6d.modules.basic.arrow.RecordBatchBuilder;
 
@@ -60,8 +57,6 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
-import org.apache.hadoop.hive.common.FileUtils;
-import org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore.AsyncProcessor.lock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -127,7 +122,6 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     private SchemaBuilder schemaBuilder;
     RecordBatchBuilder recordBatchBuilder;
     private String tableName;
-    private String[] partitionNames;
 
     public static final PathFilter VINEYARD_FILES_PATH_FILTER = new PathFilter() {
         @Override
@@ -139,101 +133,13 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
 
     private void getTableName() {
         String location = tableProperties.getProperty("location");
-        // System.out.println("finalOutPath : "+ finalOutPath.toString());
-
-        // Get partition count
-        // String partition = tableProperties.getProperty("partition_columns.types");
-        // int index = -1;
-        // int partitionCount= 0;
-        // if (partition != null) {
-        //     do {
-        //         partitionCount++;
-        //         index = partition.indexOf(":", index + 1);
-        //     } while(index != -1);
-        // }
-        // System.out.println("Partition count:" + partitionCount);
-        String []partitionString = tableProperties.getProperty("partition_columns").split(",");
-        int partitionCount = partitionString.length;
-        partitionNames = new String[partitionCount];
-        for (int i = 0; i < partitionCount; i++) {
-            partitionNames[i] = partitionString[i];
-        }
-
-        // Construct table name
-        String path = finalOutPath.toString();
-        path = path.substring(location.length(), path.length());
-        String pathSplits[] = path.split("/");
-        PathFilter vineyardPathFilter = VINEYARD_FILES_PATH_FILTER;
-        PathFilter hiddernPathFilter = FileUtils.HIDDEN_FILES_PATH_FILTER;
-        if (pathSplits.length == 0) {
-            return;
-        }
-        // tableName = location;
         System.out.println("final out path:" + finalOutPath.toString());
 
-        if (finalOutPath.toString().indexOf("_temporary") - 1 >= 0) {
-            // spark
-            // Spark will create temporary file/dir with prefix "_temporary", and will rename it to 
-            // table name with partition infomation.
 
-            // tableName = finalOutPath.toString().substring(0, finalOutPath.toString().indexOf("_temporary") - 1);
-            // if (partitionCount > 0 && finalOutPath.toString().indexOf(partitionNames[0] + "=") - 1 >= 0) {
-            //     tableName = location;
-            //     for (int i = 0; i < partitionCount; i++) {
-            //         System.out.println("final out path:" + finalOutPath.toString());
-            //         System.out.println("partition name:" + partitionNames[i]);
-
-            //         int start = finalOutPath.toString().indexOf(partitionNames[i]);
-            //         int end = finalOutPath.toString().indexOf("/", start);
-            //         System.out.println("start:" + start + " end:" + end);
-            //         if (start >= 0) {
-            //             partitionNames[i] = finalOutPath.toString().substring(start, end);
-            //             System.out.println("partition name:" + partitionNames[i]);
-            //             tableName += "/" + partitionNames[i];
-            //         } else {
-            //             partitionNames[i] = null;
-            //         }
-            //     }
-            // }
-
-            tableName = finalOutPath.toString();
-            tableName = tableName.substring(0, tableName.lastIndexOf("/"));
-        } else {
-            // hive
-            // Hive will create file/dir using table name with partition infomation directly.
-            // tableName = location;
-            // for (int i = 0; i < partitionCount; i++) {
-            //     System.out.println("final out path:" + finalOutPath.toString());
-            //     System.out.println("partition name:" + partitionNames[i]);
-
-            //     int start = finalOutPath.toString().indexOf(partitionNames[i]);
-            //     int end = finalOutPath.toString().indexOf("/", start);
-            //     System.out.println("start:" + start + " end:" + end);
-            //     if (start >= 0) {
-            //         partitionNames[i] = finalOutPath.toString().substring(start, end);
-            //         System.out.println("partition name:" + partitionNames[i]);
-            //         tableName += "/" + partitionNames[i];
-            //     } else {
-            //         partitionNames[i] = null;
-            //     }
-            // }
-            tableName = finalOutPath.toString();
-            tableName = tableName.substring(0, tableName.lastIndexOf("/"));
-        }
-        //need to support partition
-
-        // System.out.println("Path:" + path);
-        //spark
-        // for (int i = 1; i < pathSplits.length; i++) {
-        //     if (pathSplits[i].length() > 0 && hiddernPathFilter.accept(new Path(pathSplits[i]))) {
-        //         System.out.println("path split:" + pathSplits[i]);
-        //         tableName += "/" + pathSplits[i];
-        //     } else if (pathSplits[i].length() > 0 && vineyardPathFilter.accept(new Path(pathSplits[i]))) {
-        //         System.out.println("path split:" + pathSplits[i].substring(10, pathSplits[i].length()));
-        //         tableName += "/" + pathSplits[i].substring(10, pathSplits[i].length());
-        //     }
-        // }
+        tableName = finalOutPath.toString();
+        tableName = tableName.substring(0, tableName.lastIndexOf("/"));
         tableName = tableName.replaceAll("/", "#");
+
         System.out.println("tableName :" + tableName);
 
         global_lock.lock();
@@ -242,21 +148,14 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             locks.put(tableName, lock);
         }
         global_lock.unlock();
-        // System.out.println("Table name:" + tableName);
 
         // Create temp file
         String tmpFilePath = finalOutPath.toString();
         tmpFilePath = tmpFilePath.substring(0, tmpFilePath.lastIndexOf("/"));
-        // System.out.println("out path:" + tmpFilePath);
         tmpFilePath = tmpFilePath.replaceAll("_task", "");
-        // Path tmpPath = new Path(tmpFilePath, "vineyard.tmp");
-        Path tmpPath = new Path(tmpFilePath, pathSplits[pathSplits.length - 1]);
         try {
             fs = finalOutPath.getFileSystem(jc);
-            System.out.println("tmp path:" + tmpPath.toString());
             FSDataOutputStream output = FileSystem.create(fs, finalOutPath, new FsPermission("777"));
-            // String tablePathStr = tableName.replaceAll("#", "/");
-            // FileSystem.mkdirs(fs, new Path(tablePathStr), new FsPermission("777"));
             if (output != null) {
                 System.out.println("Create succeed!");
                 output.write((tableName).getBytes(StandardCharsets.UTF_8), 0, (tableName).getBytes(StandardCharsets.UTF_8).length);
@@ -326,7 +225,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     // if yes, append the data to the table.(Get from vineyard, and seal it in a new table) 
     @Override
     public void close(boolean abort) throws IOException {
-        Table oldTable = null;
+        // Table oldTable = null;
         if (objects.size() == 0) {
             System.out.println("No data to write.");
             client.disconnect();
@@ -341,13 +240,17 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
 
         global_lock.lock();
         locks.get(tableName).lock();
+
+        // TBD: Does there exists competition between different tasks?
         try {
-            ObjectID objectID = client.getName(tableName, false);
-            if (objectID == null) {
-                System.out.println("Table not exist.");
-            } else {
-                oldTable = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(objectID));
-            }
+            // ObjectID objectID = client.getName(tableName, false);
+            // if (objectID == null) {
+            //     System.out.println("Table not exist.");
+            // } else {
+            //     oldTable = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(objectID));
+            // }
+            client.getName(tableName, false);
+            System.out.println("Table exist.");
         } catch (Exception e) {
             System.out.println("Get table id failed");
         }

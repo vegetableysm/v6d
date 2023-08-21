@@ -21,17 +21,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.util.Progressable;
 import org.slf4j.Logger;
@@ -42,7 +39,6 @@ import io.v6d.core.client.ds.ObjectFactory;
 import io.v6d.core.client.ds.ObjectMeta;
 import io.v6d.core.common.util.ObjectID;
 import io.v6d.core.common.util.VineyardException;
-import io.v6d.modules.basic.arrow.Schema;
 import io.v6d.modules.basic.arrow.SchemaBuilder;
 import io.v6d.modules.basic.arrow.Table;
 import io.v6d.modules.basic.arrow.TableBuilder;
@@ -103,10 +99,6 @@ class VineyardOutputStream extends FSDataOutputStream {
 
     @Override
     public void write(int b) throws IOException {
-        // System.out.println("write:" + b);
-        // content[pos++] = (byte) (b & 0xff);
-        // System.out.println("out file:" + this.file.getFileStatus().getPath().toString());
-        // System.out.println("content" + this.content.toString());
         System.out.println("should not call this function.");
         throw new IOException("should not call this function.");
     }
@@ -115,7 +107,6 @@ class VineyardOutputStream extends FSDataOutputStream {
     public void write(byte b[], int off, int len) throws IOException {
         System.out.println("write:" + new String(b, StandardCharsets.UTF_8) + " off:" + off + " len:" + len + " pos:" + pos);
         System.out.println("current file:" + file.getFileStatus().getPath());
-        // System.out.println("out file:" + this.file.getFileStatus().getPath().toString());
         content = new byte[pos + len];
         for (int i = 0; i < len; i++) {
             content[pos++] = b[off + i];
@@ -132,34 +123,28 @@ class VineyardInputStream extends FSInputStream {
     byte[] content;
 
     public VineyardInputStream(File file) throws IOException {
-    //   this.file = file;
-    //   String pathStr = file.getFileStatus().getPath().toString();
-    //   pathStr = pathStr.substring(pathStr.indexOf(":") + 1);
-    //   String tableName = pathStr.replaceAll("//", "/");
-    //   content = tableName.getBytes();
         content = file.getFileStatus().getPath().toString().getBytes(StandardCharsets.UTF_8);
     }
 
     @Override
     public void seek(long offset) throws IOException {
-      this.offset = (int) offset;
+        this.offset = (int) offset;
     }
 
     @Override
     public long getPos() throws IOException {
-      return offset;
+        return offset;
     }
 
     @Override
     public boolean seekToNewSource(long l) throws IOException {
-      return false;
+        return false;
     }
 
     @Override
     public int read() throws IOException {
         System.out.println("read:" + offset + " length:" + content.length);
         System.out.println("read content:" + new String(content, StandardCharsets.UTF_8));
-        // System.out.println("read from:" + file.getFileStatus().getPath().toString());
         if (offset < content.length) {
             return this.content[offset++] & 0xff;
         }
@@ -170,8 +155,6 @@ class VineyardInputStream extends FSInputStream {
 class File {
     boolean isDir;
     FileStatus fileStatus;
-    // table name
-    byte[] content = new byte[255];
 
     public File(boolean isDir, FileStatus fileStatus) {
         this.isDir = isDir;
@@ -188,17 +171,6 @@ class File {
 
     public void setFileStatus(FileStatus fileStatus) {
         this.fileStatus = fileStatus;
-    }
-
-    // public VineyardOutputStream getOutputStream() {
-    //     return outputStream;
-    // }
-    public byte[] getContent() {
-        return content;
-    }
-
-    public void setContent(byte[] content) {
-        this.content = content;
     }
 }
 
@@ -228,11 +200,12 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
 
     final static Map<String, File>fileMap = new HashMap<String, File>();
     final static SpinLock lock = new SpinLock();
-    private Configuration conf;
+    private Configuration conf = null;
  
     Path workingDir = new Path("/");
     public FileSystem() {
         super();
+        System.out.println("new filesystem");
     }
 
     public void printAllFile()
@@ -326,14 +299,14 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
                                     short replication, long blockSize,
                                     Progressable progressable
                                     ) throws IOException {
-        return create(path, fsPermission, overwrite, bufferSize, replication, blockSize, progressable, false, null);
+        return create(path, fsPermission, overwrite, bufferSize, replication, blockSize, progressable, false);
     }
 
     private FSDataOutputStream create(Path path, FsPermission fsPermission,
                                     boolean overwrite, int bufferSize,
                                     short replication, long blockSize,
-                                    Progressable progressable, boolean locked,
-                                    File oldFile) throws IOException {
+                                    Progressable progressable, boolean locked
+                                    ) throws IOException {
         System.out.println("=================");
         System.out.println("create: " + path.toString());
         
@@ -350,9 +323,6 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         File f = new File(false, new FileStatus(0, false, 1, 1, 0, 0,
         new FsPermission((short) 777), null, null,
         path));
-        if (oldFile != null) {
-            f.setContent(oldFile.getContent());
-        }
         fileMap.put(pathStr, f);
         
         String[] pathList = pathStr.split("/");
@@ -426,7 +396,7 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
                 continue;
             }
             if (!file.getIsDir()) {
-                create(new Path("vineyard:" + addList.get(i)), null, false, 0, (short) 0, 0, null, true, file);
+                create(new Path("vineyard:" + addList.get(i)), null, false, 0, (short) 0, 0, null, true);
                 System.out.println("rename create done");
 
                 String tableName = file.getFileStatus().getPath().toString().replaceAll("/", "#");
