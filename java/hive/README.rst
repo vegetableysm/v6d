@@ -32,11 +32,11 @@ Hive Usage
     .. code:: sql
 
         show tables;
-        create table hive_example(
+        create table hive_example_test(
             a string,
             b int)
         stored as TEXTFILE
-        LOCATION "file:///opt/hive/data/warehouse/hive_example";
+        LOCATION "file:///opt/hive/data/warehouse/hive_example_test";
 
         insert into hive_example values('a', 1), ('a', 2), ('b',3);
         select count(distinct a) from hive_example;
@@ -62,7 +62,7 @@ Hive and Vineyard
         stored as
             INPUTFORMAT 'io.v6d.hive.ql.io.VineyardInputFormat'
             OUTPUTFORMAT 'io.v6d.hive.ql.io.VineyardOutputFormat'
-        LOCATION "file:///opt/hive/data/warehouse/hive_example";
+        LOCATION "vineyard:///opt/hive/data/warehouse/hive_example";
 
         insert into hive_example values('a', 1), ('a', 2), ('b',3);
 
@@ -77,11 +77,11 @@ Hive and Vineyard
         stored as
             INPUTFORMAT 'io.v6d.hive.ql.io.VineyardInputFormat'
             OUTPUTFORMAT 'io.v6d.hive.ql.io.VineyardOutputFormat'
-        LOCATION "file:///opt/hive/data/warehouse/hive_example2";
+        LOCATION "vineyard:///opt/hive/data/warehouse/hive_example2";
 
-        select * from hive_example;
+        select * from hive_example2;
 
-        explain vectorization only select * from hive_example;
+        explain vectorization only select * from hive_example2;
 
 - Insert using `VineyardSerDe`:
 
@@ -94,11 +94,13 @@ Hive and Vineyard
         stored as
             INPUTFORMAT 'io.v6d.hive.ql.io.VineyardInputFormat'
             OUTPUTFORMAT 'io.v6d.hive.ql.io.VineyardOutputFormat'
-        LOCATION "file:///opt/hive/data/warehouse/hive_example";
+        LOCATION "vineyard:///opt/hive/data/warehouse/hive_example";
 
         insert into hive_example values('a', 1), ('a', 2), ('b',3);
 
-- Vectorized Input (and output):
+        select * from hive_example;
+
+- Vectorized Input (and output, currently unavaliabe):
 
     .. code:: sql
 
@@ -117,12 +119,12 @@ Hive and Vineyard
                             field_4 string,
                             field_5 double,
                             field_6 float)
-        row format serde "io.v6d.hive.ql.io.VineyardSerDe"
+        row format serde "io.v6d.hive.ql.io.VineyardVectorizedSerDe"
         stored as
-            INPUTFORMAT 'io.v6d.hive.ql.io.VineyardInputFormat'
-            OUTPUTFORMAT 'io.v6d.hive.ql.io.VineyardOutputFormat';
+            INPUTFORMAT 'io.v6d.hive.ql.io.VineyardVectorizedInputFormat'
+            OUTPUTFORMAT 'io.v6d.hive.ql.io.VineyardOutputFormat'
+        LOCATION "vineyard:///opt/hive/data/warehouse/hive_example";
         insert into hive_example values(1, 1, true, 'a', 1.0, 1.0), (2, 2, true, 'b', 2.0, 2.0), (3, 3, false, 'c', 3.0, 3.0);
-        LOCATION "file:///opt/hive/data/warehouse/hive_example";
 
         select * from hive_example1;
         explain vectorization select * from hive_example;
@@ -135,14 +137,6 @@ Hive and Vineyard
     The dataset must be placed in the correct directory.
 
     .. code:: sql
-
-        set hive.fetch.task.conversion=none;
-        set hive.vectorized.use.vectorized.input.format=true;
-        set hive.vectorized.use.row.serde.deserialize=false;
-        set hive.vectorized.use.vector.serde.deserialize=true;
-        set hive.vectorized.execution.enabled=true;
-        set hive.vectorized.execution.reduce.enabled=true;
-        set hive.vectorized.row.serde.inputformat.excludes=io.v6d.hive.ql.io.VineyardInputFormat;
 
         create table hive_example(
                             src_id int,
@@ -176,14 +170,6 @@ Hive and Vineyard
 
     .. code:: sql
 
-        set hive.fetch.task.conversion=none;
-        set hive.vectorized.use.vectorized.input.format=true;
-        set hive.vectorized.use.row.serde.deserialize=false;
-        set hive.vectorized.use.vector.serde.deserialize=true;
-        set hive.vectorized.execution.enabled=true;
-        set hive.vectorized.execution.reduce.enabled=true;
-        set hive.vectorized.row.serde.inputformat.excludes=io.v6d.hive.ql.io.VineyardInputFormat;
-
         create table hive_static_partition(
             src_id int,
             dst_id int
@@ -193,6 +179,7 @@ Hive and Vineyard
         stored as
             INPUTFORMAT 'io.v6d.hive.ql.io.VineyardInputFormat'
             OUTPUTFORMAT 'io.v6d.hive.ql.io.VineyardOutputFormat';
+        LOCATION "vineyard:///opt/hive/data/warehouse/hive_static_partition";
         insert into table hive_static_partition partition(value=666) values (999, 2), (999, 2), (999, 2);
         insert into table hive_static_partition partition(value=666) values (3, 4);
         insert into table hive_static_partition partition(value=114514) values (1, 2);
@@ -204,15 +191,6 @@ Hive and Vineyard
 
     .. code:: sql
 
-        set hive.fetch.task.conversion=none;
-        set hive.vectorized.use.vectorized.input.format=true;
-        set hive.vectorized.use.row.serde.deserialize=false;
-        set hive.vectorized.use.vector.serde.deserialize=true;
-        set hive.vectorized.execution.enabled=true;
-        set hive.vectorized.execution.reduce.enabled=true;
-        set hive.vectorized.row.serde.inputformat.excludes=io.v6d.hive.ql.io.VineyardInputFormat;
-        set hive.exec.dynamic.partition=true;
-        set hive.exec.dynamic.partition.mode=nonstrict;
         create table hive_dynamic_partition_data
         (src_id int,
          dst_id int,
@@ -227,7 +205,8 @@ Hive and Vineyard
         row format serde "io.v6d.hive.ql.io.VineyardSerDe"
         stored as
             INPUTFORMAT 'io.v6d.hive.ql.io.VineyardInputFormat'
-            OUTPUTFORMAT 'io.v6d.hive.ql.io.VineyardOutputFormat';
+            OUTPUTFORMAT 'io.v6d.hive.ql.io.VineyardOutputFormat'
+        LOCATION "vineyard:///opt/hive/data/warehouse/hive_dynamic_partition_test";
         insert into table hive_dynamic_partition_test partition(mounth=1, year) select src_id,dst_id,year from hive_dynamic_partition_data;
         select * from hive_dynamic_partition_test;
 
@@ -244,6 +223,8 @@ Connect to Hive from Spark
 
   .. code:: scala
 
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.SparkSession
       val conf = new SparkConf()
       conf.setAppName("Spark on Vineyard")
           // use local executor for development & testing
@@ -263,6 +244,7 @@ Connect to Hive from Spark
           .config("spark.sql.hive.metastore.jars.path", "/opt/apache-hive-3.1.3-bin/lib/*")
           .enableHiveSupport()
           .getOrCreate()
+        spark.sql()
       val sc: SparkContext = spark.sparkContext
 
 - Use the session:

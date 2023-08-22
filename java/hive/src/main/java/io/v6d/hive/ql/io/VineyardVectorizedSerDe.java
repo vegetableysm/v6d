@@ -30,7 +30,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.io.Writable;
 
-public class VineyardBackUpSerDe extends ArrowColumnarBatchSerDe {
+public class VineyardVectorizedSerDe extends ArrowColumnarBatchSerDe {
     StructTypeInfo rowTypeInfo;
 
     @Override
@@ -72,10 +72,6 @@ public class VineyardBackUpSerDe extends ArrowColumnarBatchSerDe {
         List<Object> standardObjects = new ArrayList<Object>();
         ObjectInspectorUtils.copyToStandardObject(standardObjects, obj,
             ((StructObjectInspector) objInspector), ObjectInspectorUtils.ObjectInspectorCopyOption.WRITABLE);
-        System.out.println("row length:" + standardObjects.size());
-        for (int i = 0; i < standardObjects.size(); i++) {
-            System.out.println((standardObjects.get(i)));
-        }
         return getRowWritable(standardObjects);
     }
 
@@ -85,11 +81,5 @@ public class VineyardBackUpSerDe extends ArrowColumnarBatchSerDe {
             System.out.println("get row writable is null");
         }
         return rowWritable;
-    }
-
-    @Override
-    public Object deserialize(Writable writable) {
-        System.out.println("deserialize called");
-        return ((RowWritable) writable).getValues();
     }
 }

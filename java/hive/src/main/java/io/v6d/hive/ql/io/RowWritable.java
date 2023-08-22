@@ -43,32 +43,32 @@ public class RowWritable implements Writable {
     }
 
     private BooleanWritable makeWritable(boolean value) {
-        System.out.println("makeWritable(boolean value) called");
+        // System.out.println("makeWritable(boolean value) called");
         return new BooleanWritable(value);
     }
 
     private IntWritable makeWritable(int value) {
-        System.out.println("makeWritable(int value) called");
+        // System.out.println("makeWritable(int value) called");
         return new IntWritable(value);
     }
 
     private LongWritable makeWritable(long value) {
-        System.out.println("makeWritable(long value) called");
+        // System.out.println("makeWritable(long value) called");
         return new LongWritable(value);
     }
 
     private FloatWritable makeWritable(float value) {
-        System.out.println("makeWritable(float value) called");
+        // System.out.println("makeWritable(float value) called");
         return new FloatWritable(value);
     }
 
     private DoubleWritable makeWritable(double value) {
-        System.out.println("makeWritable(double value) called");
+        // System.out.println("makeWritable(double value) called");
         return new DoubleWritable(value);
     }
 
     private Text makeWritable(String value) {
-        System.out.println("makeWritable(String value) called");
+        // System.out.println("makeWritable(String value) called");
         return new Text(value);
     }
 

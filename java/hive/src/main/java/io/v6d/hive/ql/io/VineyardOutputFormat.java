@@ -111,7 +111,12 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     private JobConf jc;
     private Path finalOutPath;
     private FileSystem fs;
-    private List<VineyardRowWritable> objects;
+    // private List<VineyardRowWritable> objects;
+    private List<VineyardRowWritable[]> objects;
+    private int lastBatchIndex = 0;
+    private final int batchSize = 5000000;
+    private VineyardRowWritable[] currentRows;
+
     private Schema schema;
     private Properties tableProperties;
     private Progressable progress;
@@ -121,7 +126,12 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     private TableBuilder tableBuilder;
     private SchemaBuilder schemaBuilder;
     RecordBatchBuilder recordBatchBuilder;
+    List<RecordBatchBuilder> recordBatchBuilders;
     private String tableName;
+
+    //timer
+    private long startTime;
+    private long endTime;
 
     public static final PathFilter VINEYARD_FILES_PATH_FILTER = new PathFilter() {
         @Override
@@ -175,6 +185,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             Properties tableProperties,
             Progressable progress) {
         System.out.println("Create sink record writer");
+        startTime = System.currentTimeMillis();
         this.jc = jc;
         if (!ArrowWrapperWritable.class.isAssignableFrom(valueClass)) {
             throw new VineyardException.Invalid("value class must be ArrowWrapperWritable");
@@ -203,21 +214,36 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             System.out.printf("Hello vineyard!\n");
         }
 
-        objects = new ArrayList<VineyardRowWritable>();
+        // objects = new ArrayList<VineyardRowWritable>();
+        objects = new ArrayList<VineyardRowWritable[]>();
+        VineyardRowWritable[] rows = new VineyardRowWritable[batchSize];
+        recordBatchBuilders = new ArrayList<RecordBatchBuilder>();
+        currentRows = rows;
+        objects.add(rows);
         Arrow.instantiate();
     }
 
     @Override
     public void write(Writable w) throws IOException {
-        System.out.println("Write");
+        // System.out.println("Write");
         if (w == null) {
             System.out.println("w is null");
             return;
         }
 
         VineyardRowWritable rowWritable = (VineyardRowWritable) w;
-        System.out.println("value:" + (rowWritable.getValues().get(0)) + " " + (rowWritable.getValues().get(1)));
-        objects.add(rowWritable);
+        // System.out.println("value:" + (rowWritable.getValues().get(0)) + " " + (rowWritable.getValues().get(1)));
+        // objects.add(rowWritable);
+        if (lastBatchIndex < batchSize) {
+            currentRows[lastBatchIndex++] = rowWritable;
+        } else {
+            System.out.println("Record batch is full. Create new batch!");
+            VineyardRowWritable[] rows = new VineyardRowWritable[batchSize];
+            currentRows = rows;
+            objects.add(rows);
+            lastBatchIndex = 0;
+            currentRows[lastBatchIndex++] = rowWritable;
+        }
     }
     
     // check if the table is already created.
@@ -226,7 +252,10 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     @Override
     public void close(boolean abort) throws IOException {
         // Table oldTable = null;
-        if (objects.size() == 0) {
+        endTime = System.currentTimeMillis();
+        System.out.println("Write cost:" + (endTime - startTime) / 1000 + "s.");
+        startTime = System.currentTimeMillis();
+        if (objects.get(0)[0] == null) {
             System.out.println("No data to write.");
             client.disconnect();
             System.out.println("Bye, vineyard!");
@@ -236,24 +265,27 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
 
         // construct record batch
         constructRecordBatch();
+        endTime = System.currentTimeMillis();
+        System.out.println("Construct record batch cost:" + (endTime - startTime) / 1000 + "s.");
+
         tableBuilder = new TableBuilder(client, schemaBuilder);
 
         global_lock.lock();
         locks.get(tableName).lock();
 
         // TBD: Does there exists competition between different tasks?
-        try {
+        // try {
             // ObjectID objectID = client.getName(tableName, false);
             // if (objectID == null) {
             //     System.out.println("Table not exist.");
             // } else {
             //     oldTable = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(objectID));
             // }
-            client.getName(tableName, false);
-            System.out.println("Table exist.");
-        } catch (Exception e) {
-            System.out.println("Get table id failed");
-        }
+        //     client.getName(tableName, false);
+        //     System.out.println("Table exist.");
+        // } catch (Exception e) {
+        //     System.out.println("Get table id failed");
+        // }
 
         // if (oldTable != null) {
         //     for (int i = 0; i < oldTable.getBatches().size(); i++) {
@@ -261,7 +293,10 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         //     }
         // }
 
-        tableBuilder.addBatch(recordBatchBuilder);
+        startTime = System.currentTimeMillis();
+        for (int i = 0; i < recordBatchBuilders.size(); i++) {
+            tableBuilder.addBatch(recordBatchBuilders.get(i));
+        }
         try {
             ObjectMeta meta = tableBuilder.seal(client);
             System.out.println("Table id in vineyard:" + meta.getId().value());
@@ -278,6 +313,8 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         client.disconnect();
 
         System.out.println("Bye, vineyard!");
+        endTime = System.currentTimeMillis();
+        System.out.println("Seal cost:" + (endTime - startTime) / 1000 + "s.");
     }
 
     private static ArrowType toArrowType(TypeInfo typeInfo) {
@@ -337,28 +374,37 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         // construct schema
         // StructVector rootVector = StructVector.empty(null, allocator);
         List<Field> fields = new ArrayList<Field>();
-        int columns = objects.get(0).getTargetTypeInfos().length;
+        // int columns = objects.get(0).getTargetTypeInfos().length;
+        int columns = objects.get(0)[0].getTargetTypeInfos().length;
         for (int i = 0; i < columns; i++) {
-            Field field = Field.nullable(objects.get(0).getTargetTypeInfos()[i].getTypeName(), toArrowType(objects.get(0).getTargetTypeInfos()[i]));
+            // Field field = Field.nullable(objects.get(0).getTargetTypeInfos()[i].getTypeName(), toArrowType(objects.get(0).getTargetTypeInfos()[i]));
+            Field field = Field.nullable(objects.get(0)[0].getTargetTypeInfos()[i].getTypeName(), toArrowType(objects.get(0)[0].getTargetTypeInfos()[i]));
             fields.add(field);
         }
         schema = new Schema((Iterable<Field>)fields);
         schemaBuilder = SchemaBuilder.fromSchema(schema);
 
         // construct recordBatch
-        try {
-            recordBatchBuilder = new RecordBatchBuilder(client, schema, objects.size());
-            System.out.println("Create done!");
-            fillRecordBatchBuilder(schema);
-            System.out.println("Fill done!");
-        } catch (Exception e) {
-            System.out.println("Create record batch builder failed");
+        for(int i = 0; i < objects.size(); i++) {
+            int rowCount = objects.get(i).length;
+            if (i == objects.size() - 1) {
+                rowCount = lastBatchIndex;
+            }
+            try {
+                recordBatchBuilder = new RecordBatchBuilder(client, schema, rowCount);
+                System.out.println("Create done!");
+                fillRecordBatchBuilder(schema, i, rowCount);
+                System.out.println("Fill done!");
+                recordBatchBuilders.add(recordBatchBuilder);
+            } catch (Exception e) {
+                System.out.println("Create record batch builder failed");
+            }
         }
     }
 
-    private void fillRecordBatchBuilder(Schema schema) {
-        int rowCount = objects.size();
-        System.out.println("row count:" + rowCount);
+    private void fillRecordBatchBuilder(Schema schema, int objectIndex, int rowCount) {
+        // int rowCount = objects.size();
+        System.out.println("object Index:" + objectIndex + " rowCount:" + rowCount);
         for (int i = 0; i < schema.getFields().size(); i++) {
             ColumnarDataBuilder column;
             try {
@@ -371,50 +417,50 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             if (field.getType().equals(Arrow.Type.Boolean)) {
                 for (int j = 0; j < rowCount; j++) {
                     boolean value;
-                    if (objects.get(j).getValues().get(i) instanceof Boolean) {
-                        value = (Boolean) objects.get(j).getValues().get(i);
+                    if (objects.get(objectIndex)[j].getValues().get(i) instanceof Boolean) {
+                        value = (Boolean) objects.get(objectIndex)[j].getValues().get(i);
                     } else {
-                        value = ((BooleanWritable) objects.get(j).getValues().get(i)).get();
+                        value = ((BooleanWritable) objects.get(objectIndex)[j].getValues().get(i)).get();
                     }
                     column.setBoolean(j, value);
                 }
             } else if (field.getType().equals(Arrow.Type.Int)) {
                 for (int j = 0; j < rowCount; j++) {
                     int value;
-                    if (objects.get(j).getValues().get(i) instanceof Integer) {
-                        value = (Integer) objects.get(j).getValues().get(i);
+                    if (objects.get(objectIndex)[j].getValues().get(i) instanceof Integer) {
+                        value = (Integer) objects.get(objectIndex)[j].getValues().get(i);
                     } else {
-                        value = ((IntWritable) objects.get(j).getValues().get(i)).get();
+                        value = ((IntWritable) objects.get(objectIndex)[j].getValues().get(i)).get();
                     }
                     column.setInt(j, value);
                 }
             } else if (field.getType().equals(Arrow.Type.Int64)) {
                 for (int j = 0; j < rowCount; j++) {
                     long value;
-                    if (objects.get(j).getValues().get(i) instanceof Long) {
-                        value = (Long) objects.get(j).getValues().get(i);
+                    if (objects.get(objectIndex)[j].getValues().get(i) instanceof Long) {
+                        value = (Long) objects.get(objectIndex)[j].getValues().get(i);
                     } else {
-                        value = ((LongWritable) objects.get(j).getValues().get(i)).get();
+                        value = ((LongWritable) objects.get(objectIndex)[j].getValues().get(i)).get();
                     }
                     column.setLong(j, value);
                 }
             } else if (field.getType().equals(Arrow.Type.Float)) {
                 for (int j = 0; j < rowCount; j++) {
                     float value;
-                    if (objects.get(j).getValues().get(i) instanceof Float) {
-                        value = (Float) objects.get(j).getValues().get(i);
+                    if (objects.get(objectIndex)[j].getValues().get(i) instanceof Float) {
+                        value = (Float) objects.get(objectIndex)[j].getValues().get(i);
                     } else {
-                        value = ((FloatWritable) objects.get(j).getValues().get(i)).get();
+                        value = ((FloatWritable) objects.get(objectIndex)[j].getValues().get(i)).get();
                     }
                     column.setFloat(j, value);
                 }
             } else if (field.getType().equals(Arrow.Type.Double)) {
                 for (int j = 0; j < rowCount; j++) {
                     double value;
-                    if (objects.get(j).getValues().get(i) instanceof Double) {
-                        value = (Double) objects.get(j).getValues().get(i);
+                    if (objects.get(objectIndex)[j].getValues().get(i) instanceof Double) {
+                        value = (Double) objects.get(objectIndex)[j].getValues().get(i);
                     } else {
-                        value = ((DoubleWritable) objects.get(j).getValues().get(i)).get();
+                        value = ((DoubleWritable) objects.get(objectIndex)[j].getValues().get(i)).get();
                     }
                     column.setDouble(j, value);
                 }
@@ -423,10 +469,10 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
                 // may be not correct
                 for (int j = 0; j < rowCount; j++) {
                     String value;
-                    if (objects.get(j).getValues().get(i) instanceof String) {
-                        value = (String) objects.get(j).getValues().get(i);
+                    if (objects.get(objectIndex)[j].getValues().get(i) instanceof String) {
+                        value = (String) objects.get(objectIndex)[j].getValues().get(i);
                     } else {
-                        value = ((Text) objects.get(j).getValues().get(i)).toString();
+                        value = ((Text) objects.get(objectIndex)[j].getValues().get(i)).toString();
                     }
                     column.setUTF8String(j, new org.apache.arrow.vector.util.Text(value));
                 }
