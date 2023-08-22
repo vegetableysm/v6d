@@ -19,10 +19,14 @@ class VineyardRowWritable extends ArrowWrapperWritable {
     private TypeInfo[] targetTypeInfos;
 
     public VineyardRowWritable(final List<Object> colValues, StructTypeInfo rowTypeInfo) {
+        // long startTime = System.nanoTime();
+        long startTime = System.nanoTime();
         this.colValues = colValues;
         StructObjectInspector rowObjectInspector = (StructObjectInspector) getStandardWritableObjectInspectorFromTypeInfo(rowTypeInfo);
         final List<? extends StructField> fields = rowObjectInspector.getAllStructFieldRefs();
         final int count = fields.size();
+        long endTime = System.nanoTime();
+        System.out.println("Stage 1 takes " + (endTime - startTime) + " ns");
         targetTypeInfos = new TypeInfo[count];
         for (int i = 0; i < count; i++) {
             final StructField field = fields.get(i);
@@ -32,6 +36,13 @@ class VineyardRowWritable extends ArrowWrapperWritable {
 
             targetTypeInfos[i] = typeInfo;
         }
+        System.out.println("Stage 2 takes " + (System.nanoTime() - endTime) + " ns");
+        // System.out.println("Create row writable takes " + (System.nanoTime() - startTime) + " ns");
+    }
+
+    public VineyardRowWritable(final List<Object> colValues, TypeInfo[] targetTypeInfos) {
+        this.colValues = colValues;
+        this.targetTypeInfos = targetTypeInfos;
     }
 
     public List<Object> getValues() {

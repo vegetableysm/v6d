@@ -114,7 +114,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     // private List<VineyardRowWritable> objects;
     private List<VineyardRowWritable[]> objects;
     private int lastBatchIndex = 0;
-    private final int batchSize = 5000000;
+    private final int batchSize = 3000000;
     private VineyardRowWritable[] currentRows;
 
     private Schema schema;
@@ -142,15 +142,14 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     };
 
     private void getTableName() {
-        String location = tableProperties.getProperty("location");
-        System.out.println("final out path:" + finalOutPath.toString());
+        // System.out.println("final out path:" + finalOutPath.toString());
 
 
         tableName = finalOutPath.toString();
         tableName = tableName.substring(0, tableName.lastIndexOf("/"));
         tableName = tableName.replaceAll("/", "#");
 
-        System.out.println("tableName :" + tableName);
+        // System.out.println("tableName :" + tableName);
 
         global_lock.lock();
         if (!locks.containsKey(tableName)) {
@@ -159,15 +158,11 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         }
         global_lock.unlock();
 
-        // Create temp file
-        String tmpFilePath = finalOutPath.toString();
-        tmpFilePath = tmpFilePath.substring(0, tmpFilePath.lastIndexOf("/"));
-        tmpFilePath = tmpFilePath.replaceAll("_task", "");
         try {
             fs = finalOutPath.getFileSystem(jc);
             FSDataOutputStream output = FileSystem.create(fs, finalOutPath, new FsPermission("777"));
             if (output != null) {
-                System.out.println("Create succeed!");
+                // System.out.println("Create succeed!");
                 output.write((tableName).getBytes(StandardCharsets.UTF_8), 0, (tableName).getBytes(StandardCharsets.UTF_8).length);
                 output.close();
             }
@@ -184,7 +179,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             boolean isCompressed,
             Properties tableProperties,
             Progressable progress) {
-        System.out.println("Create sink record writer");
+        // System.out.println("Create sink record writer");
         startTime = System.currentTimeMillis();
         this.jc = jc;
         if (!ArrowWrapperWritable.class.isAssignableFrom(valueClass)) {
@@ -226,10 +221,10 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     @Override
     public void write(Writable w) throws IOException {
         // System.out.println("Write");
-        if (w == null) {
-            System.out.println("w is null");
-            return;
-        }
+        // if (w == null) {
+        //     System.out.println("w is null");
+        //     return;
+        // }
 
         VineyardRowWritable rowWritable = (VineyardRowWritable) w;
         // System.out.println("value:" + (rowWritable.getValues().get(0)) + " " + (rowWritable.getValues().get(1)));
@@ -238,6 +233,9 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             currentRows[lastBatchIndex++] = rowWritable;
         } else {
             System.out.println("Record batch is full. Create new batch!");
+            endTime = System.currentTimeMillis();
+            System.out.println("Fill a record batch cost:" + (endTime - startTime) / 1000 + "s.");
+            startTime = System.currentTimeMillis();
             VineyardRowWritable[] rows = new VineyardRowWritable[batchSize];
             currentRows = rows;
             objects.add(rows);
@@ -252,8 +250,6 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     @Override
     public void close(boolean abort) throws IOException {
         // Table oldTable = null;
-        endTime = System.currentTimeMillis();
-        System.out.println("Write cost:" + (endTime - startTime) / 1000 + "s.");
         startTime = System.currentTimeMillis();
         if (objects.get(0)[0] == null) {
             System.out.println("No data to write.");

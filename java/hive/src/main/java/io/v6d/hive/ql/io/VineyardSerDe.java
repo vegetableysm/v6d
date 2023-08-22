@@ -24,14 +24,18 @@ import org.apache.hadoop.hive.ql.io.arrow.ArrowColumnarBatchSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
+import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.io.Writable;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils.getStandardWritableObjectInspectorFromTypeInfo;
 
 public class VineyardSerDe extends ArrowColumnarBatchSerDe {
     StructTypeInfo rowTypeInfo;
+    private TypeInfo[] targetTypeInfos;
 
     @Override
     public void initialize(Configuration configuration, Properties tableProperties)
@@ -65,6 +69,19 @@ public class VineyardSerDe extends ArrowColumnarBatchSerDe {
             columnTypes = TypeInfoUtils.getTypeInfosFromTypeString(columnTypeProperty);
         }
         rowTypeInfo = (StructTypeInfo) TypeInfoFactory.getStructTypeInfo((List)columnNames, columnTypes);
+
+        StructObjectInspector rowObjectInspector = (StructObjectInspector) getStandardWritableObjectInspectorFromTypeInfo(rowTypeInfo);
+        final List<? extends StructField> fields = rowObjectInspector.getAllStructFieldRefs();
+        final int count = fields.size();
+        targetTypeInfos = new TypeInfo[count];
+        for (int i = 0; i < count; i++) {
+            final StructField field = fields.get(i);
+            final ObjectInspector fieldInspector = field.getFieldObjectInspector();
+            final TypeInfo typeInfo =
+                TypeInfoUtils.getTypeInfoFromTypeString(fieldInspector.getTypeName());
+
+            targetTypeInfos[i] = typeInfo;
+        }
     }
 
     @Override
@@ -72,19 +89,7 @@ public class VineyardSerDe extends ArrowColumnarBatchSerDe {
         List<Object> standardObjects = new ArrayList<Object>();
         ObjectInspectorUtils.copyToStandardObject(standardObjects, obj,
             ((StructObjectInspector) objInspector), ObjectInspectorUtils.ObjectInspectorCopyOption.WRITABLE);
-        // System.out.println("row length:" + standardObjects.size());
-        // for (int i = 0; i < standardObjects.size(); i++) {
-        //     System.out.println((standardObjects.get(i)));
-        // }
-        return getRowWritable(standardObjects);
-    }
-
-    private VineyardRowWritable getRowWritable(List<Object> standardObjects) {
-        VineyardRowWritable rowWritable = new VineyardRowWritable(standardObjects, rowTypeInfo);
-        if (rowWritable.getValues() == null) {
-            System.out.println("get row writable is null");
-        }
-        return rowWritable;
+        return new VineyardRowWritable(standardObjects, targetTypeInfos);
     }
 
     @Override
