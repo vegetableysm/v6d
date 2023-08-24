@@ -23,8 +23,8 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 
+import io.v6d.hive.ql.io.CloseableReentrantLock;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -34,6 +34,8 @@ import org.apache.hadoop.util.Progressable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import lombok.*;
+
 import io.v6d.core.client.IPCClient;
 import io.v6d.core.client.ds.ObjectFactory;
 import io.v6d.core.client.ds.ObjectMeta;
@@ -42,7 +44,6 @@ import io.v6d.core.common.util.VineyardException;
 import io.v6d.modules.basic.arrow.SchemaBuilder;
 import io.v6d.modules.basic.arrow.Table;
 import io.v6d.modules.basic.arrow.TableBuilder;
-
 
 class VineyardOutputStream extends FSDataOutputStream {
     File file;
@@ -59,17 +60,17 @@ class VineyardOutputStream extends FSDataOutputStream {
     @Override
     public void close() throws IOException {
         super.close();
-        System.out.println("close!");
-        // System.out.println("Change table name from:" + new String(file.getContent(), StandardCharsets.UTF_8) +
-        //                     " to:" + new String(content, StandardCharsets.UTF_8));
-        // file.setContent(content);
         String contentStr = new String(content, StandardCharsets.UTF_8);
+        System.out.println("Change table name from:" + contentStr +
+                " to: " + file.getFileStatus().getPath().toString());
         String tableName = null;
         if (contentStr.startsWith(FileSystem.SCHEME + ":")) {
             tableName = contentStr.replaceAll("//", "/");
-            tableName = tableName.substring(0, tableName.lastIndexOf("/")).replaceAll("/", "#");
+            if (tableName.contains("/_tmp.")) {
+                tableName = tableName.substring(0, tableName.lastIndexOf("/")).replaceAll("/", "#");
+            }
         }
-        System.out.println("Table name:" + tableName);
+        System.out.println("Closing: table name: " + tableName);
         if (tableName == null || tableName.length() == 0) {
             return;
         }
@@ -79,7 +80,7 @@ class VineyardOutputStream extends FSDataOutputStream {
             return;
         }
         newTableName = newTableName.substring(0, newTableName.lastIndexOf("/")).replaceAll("/", "#");
-        System.out.println("New table name:" + newTableName);
+        System.out.println("Closing: new table name:" + newTableName);
 
         try {
             ObjectID oldTableID = client.getName(tableName, false);
@@ -87,8 +88,9 @@ class VineyardOutputStream extends FSDataOutputStream {
                 System.out.println("Table not exist.");
             }
             client.putName(oldTableID, newTableName);
-        } catch (Exception e) {
-            System.out.println("Get table id failed");
+            System.out.println("update the table name for " + oldTableID + " from " + tableName + " to " + newTableName);
+        } catch (VineyardException e) {
+            System.out.println("failed to inspect the tablename: " + tableName + ": " + e);
         }
     }
 
@@ -114,7 +116,7 @@ class VineyardOutputStream extends FSDataOutputStream {
                 throw new IOException("content too long");
             }
         }
-        System.out.println("content" + new String(content, StandardCharsets.UTF_8));
+        System.out.println("content: " + new String(content, StandardCharsets.UTF_8));
     }
 }
 
@@ -143,12 +145,10 @@ class VineyardInputStream extends FSInputStream {
 
     @Override
     public int read() throws IOException {
-        // System.out.println("read:" + offset + " length:" + content.length);
-        // System.out.println("read content:" + new String(content, StandardCharsets.UTF_8));
         if (offset < content.length) {
             return this.content[offset++] & 0xff;
         }
-      return -1;
+        return -1;
     }
 }
 
@@ -174,23 +174,6 @@ class File {
     }
 }
 
-class SpinLock {
-
-    private AtomicReference<Thread> sign = new AtomicReference<>();
-
-    public void lock() {
-        // System.out.println("lock!");
-        Thread current = Thread.currentThread();
-
-        while(!sign.compareAndSet(null, current)) {}
-    }
-
-    public void unlock (){
-        // System.out.println("unlock!");
-        Thread current = Thread.currentThread();
-        sign.compareAndSet(current, null);
-    }
-}
 public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     private IPCClient client;
     public static final String SCHEME = "vineyard";
@@ -199,7 +182,7 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
     private static Logger logger = LoggerFactory.getLogger(FileSystem.class);
 
     final static Map<String, File>fileMap = new HashMap<String, File>();
-    final static SpinLock lock = new SpinLock();
+    final static CloseableReentrantLock lock = new CloseableReentrantLock();
     private Configuration conf = null;
  
     Path workingDir = new Path("/");
@@ -259,21 +242,15 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         this.uri = name;
         mkdirs(new Path(uri.toString().replaceAll("///", "/")));
         // connect to vineyard
-        try {
-            if (client == null) {
-                // TBD: get vineyard socket path from table properties
-                client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
-            }
-            if (client == null || !client.connected()) {
-                throw new VineyardException.Invalid("failed to connect to vineyard");
-            } else {
-                System.out.printf("Connected to vineyard succeed!\n");
-                System.out.printf("Hello vineyard!\n");
-            }
-        } catch (VineyardException e) {
-            System.out.printf("Failed to connect to vineyard!\n");
-            System.out.println(e.getMessage());
-            throw new IOException(e);
+        if (client == null) {
+            // TBD: get vineyard socket path from table properties
+            client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
+        }
+        if (client == null || !client.connected()) {
+            throw new VineyardException.Invalid("failed to connect to vineyard");
+        } else {
+            System.out.printf("Connected to vineyard succeed!\n");
+            System.out.printf("Hello vineyard!\n");
         }
         // System.out.println("=================");
     }
@@ -293,28 +270,26 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         return new FSDataInputStream(new VineyardInputStream(file));
     }
 
-  @Override
+    @Override
     public FSDataOutputStream create(Path path, FsPermission fsPermission,
                                     boolean overwrite, int bufferSize,
                                     short replication, long blockSize,
                                     Progressable progressable
                                     ) throws IOException {
-        return create(path, fsPermission, overwrite, bufferSize, replication, blockSize, progressable, false);
+        try (val lock = this.lock.open()) {
+            return createInternal(path, fsPermission, overwrite, bufferSize, replication, blockSize, progressable);
+        }
     }
 
-    private FSDataOutputStream create(Path path, FsPermission fsPermission,
-                                    boolean overwrite, int bufferSize,
-                                    short replication, long blockSize,
-                                    Progressable progressable, boolean locked
-                                    ) throws IOException {
+    private FSDataOutputStream createInternal(Path path, FsPermission fsPermission,
+                                              boolean overwrite, int bufferSize,
+                                              short replication, long blockSize,
+                                              Progressable progressable) throws IOException {
         // System.out.println("=================");
         // System.out.println("create: " + path.toString());
         
         String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
         pathStr = pathStr.replaceAll("//", "/");
-        if (!locked) {
-            lock.lock();
-        }
         if (fileMap.containsKey(pathStr)) {
             System.out.println("File exists, delete!");
             fileMap.remove(pathStr);
@@ -343,9 +318,6 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         }
         FSDataOutputStream result = new FSDataOutputStream(new VineyardOutputStream(f, client), null);
         // printAllFile ();
-        if (!locked) {
-            lock.unlock();
-        }
         // System.out.println("=================");
         return result;
     }
@@ -361,12 +333,38 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
 
     @Override
     public boolean delete(Path path, boolean b) throws IOException {
-      return this.delete(path, b, false);
+        try (val lock = this.lock.open()) {
+            return this.deleteInternal(path, b);
+        }
     }
 
+    private boolean deleteInternal(Path path, boolean b) throws IOException {
+        // System.out.println("=================");
+        // System.out.println("delete: " + path);
+        String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
+        pathStr = pathStr.replaceAll("//", "/");
+        List<String> deleteList = new ArrayList<String>();
+        for (String key : fileMap.keySet()) {
+            if (key.startsWith(pathStr) && (key.length() == pathStr.length() || key.substring(pathStr.length()).charAt(0) == '/')) {
+                deleteList.add(key);
+            }
+        }
+        for (int i = 0; i < deleteList.size(); i++) {
+            fileMap.remove(deleteList.get(i));
+        }
+        // printAllFile ();
+        // System.out.println("=================");
+        return true;
+    }
 
     @Override
     public boolean rename(Path path, Path path1) throws IOException {
+        try (val lock = this.lock.open()) {
+            return this.renameInternal(path, path1);
+        }
+    }
+
+    public boolean renameInternal(Path path, Path path1) throws IOException {
         // now we create the new file and delete old file to simulate rename
         // System.out.println("=================");
         // System.out.println("rename: " + path.toString() + " to " + path1.toString());
@@ -378,7 +376,6 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         List<String> deleteList = new ArrayList<String>();
         List<String> addList = new ArrayList<String>();
         
-        lock.lock();
         for (String key : fileMap.keySet()) {
             if (key.startsWith(pathStr) && (key.length() == pathStr.length() || key.substring(pathStr.length()).charAt(0) == '/')) {
                 // System.out.println("find:" + key);
@@ -391,114 +388,70 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         //delete old file and create new file
         for (int i = 0; i < deleteList.size(); i++) {
             File file = fileMap.get(deleteList.get(i));
-            if (!file.getIsDir()) {
-                create(new Path("vineyard:" + addList.get(i)), null, false, 0, (short) 0, 0, null, true);
-                // System.out.println("rename create done");
-
-                String tableName = file.getFileStatus().getPath().toString().replaceAll("/", "#");
-                tableName = tableName.substring(0, tableName.lastIndexOf("#"));
-                if (tableName.length() > 0) {
-                    try {
-                        // System.out.println("rename table:" + tableName);
-                        ObjectID objectID = client.getName(tableName, false);
-                        if (objectID == null) {
-                            System.out.println("Table not exists!");
-                        } else {
-                            Table table1 = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(objectID));
-                            String newTableName = fileMap.get(addList.get(i)).getFileStatus().getPath().toString().replaceAll("/", "#");
-                            newTableName = newTableName.substring(0, newTableName.lastIndexOf("#"));
-                            // System.out.println("New table name:" + newTableName);
-
-                            // check if table exists
-                            Table table2 = null;
-                            try {
-                                ObjectID oldTableID = client.getName(newTableName, false);
-                                if (oldTableID == null) {
-                                    System.out.println("Table not exist.");
-                                } else {
-                                    table2 = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(oldTableID));
-                                }
-                            } catch (Exception e) {
-                                System.out.println("Get table id failed");
-                            }
-
-                            ObjectID mergedTableID = objectID;
-                            if (table2 != null && table2.getBatches().size() > 0) {
-                                // System.out.println("Table already exists, merge!");
-                                SchemaBuilder schemaBuilder = SchemaBuilder.fromSchema(table1.getSchema());
-                                TableBuilder tableBuilder = new TableBuilder(client, schemaBuilder);
-                                for (int j = 0; j < table1.getBatches().size(); j++) {
-                                    tableBuilder.addBatch(table1.getBatch(j));
-                                }
-                                for (int j = 0; j < table2.getBatches().size(); j++) {
-                                    tableBuilder.addBatch(table2.getBatch(j));
-                                }
-                                try {
-                                    ObjectMeta meta = tableBuilder.seal(client);
-                                    // System.out.println("Merged table id in vineyard:" + meta.getId().value());
-                                    client.persist(meta.getId());
-                                    // System.out.println("Table persisted, name:" + newTableName);
-                                    // System.out.println("record batch size:" + tableBuilder.getBatchSize());
-                                    mergedTableID = meta.getId();
-                                } catch (Exception e) {
-                                    System.out.println("Merge table failed.");
-                                    System.out.println(e.getMessage());
-                                }
-                            }
-
-                            client.putName(mergedTableID, newTableName);
-                            client.dropName(tableName);
-                        }
-                    } catch (Exception e) {
-                        System.out.println("Get table exception.");
-                        if (e instanceof VineyardException.ObjectNotExists) {
-                            System.out.println(e.getMessage());
-                        } else {
-                            // FIXME
-                            System.out.println("return true 1");
-                            System.out.println("=================");
-                            lock.unlock();
-                            this.delete(path, false, true);
-                            return true;
-                        }
-                    }
-                }
-            } else {
-                mkdirs(new Path("vineyard:" + addList.get(i)), new FsPermission((short) 777), true);
-                // System.out.println("rename mkdir done");
+            if (file.getIsDir()) {
+                mkdirsInternal(new Path("vineyard:" + addList.get(i)), new FsPermission((short) 777));
+                continue;
             }
+            createInternal(new Path("vineyard:" + addList.get(i)), null, false, 0, (short) 0, 0, null);
+            // System.out.println("rename create done");
+
+            String tableName = file.getFileStatus().getPath().toString().replaceAll("/", "#");
+            tableName = tableName.substring(0, tableName.lastIndexOf("#"));
+            System.out.println("rename: tableName: " + tableName);
+            if (tableName.length() == 0) {
+                continue;
+            }
+            String newTableName = fileMap.get(addList.get(i)).getFileStatus().getPath().toString().replaceAll("/", "#");
+            newTableName = newTableName.substring(0, newTableName.lastIndexOf("#"));
+            System.out.println("New table name:" + newTableName);
+
+            ObjectID objectID;
+            Table table1;
+            try {
+                objectID = client.getName(tableName, false);
+                table1 = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(objectID));
+            } catch (VineyardException e) {
+                System.out.println("Table not exists: ignore as might already be renamed");
+                continue;
+            }
+
+            // check if table exists
+            Table table2 = null;
+            try {
+                ObjectID oldTableID = client.getName(newTableName, false);
+                table2 = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(oldTableID));
+            } catch (VineyardException e) {
+                System.out.println("Table not exist: " + e);
+            }
+
+            ObjectID mergedTableID = objectID;
+            if (table2 != null && table2.getBatches().size() > 0) {
+                // System.out.println("Table already exists, merge!");
+                SchemaBuilder schemaBuilder = SchemaBuilder.fromSchema(table1.getSchema());
+                TableBuilder tableBuilder = new TableBuilder(client, schemaBuilder);
+                for (int j = 0; j < table1.getBatches().size(); j++) {
+                    tableBuilder.addBatch(table1.getBatch(j));
+                }
+                for (int j = 0; j < table2.getBatches().size(); j++) {
+                    tableBuilder.addBatch(table2.getBatch(j));
+                }
+                ObjectMeta meta = tableBuilder.seal(client);
+                // System.out.println("Merged table id in vineyard:" + meta.getId().value());
+                client.persist(meta.getId());
+                // System.out.println("Table persisted, name:" + newTableName);
+                // System.out.println("record batch size:" + tableBuilder.getBatchSize());
+                mergedTableID = meta.getId();
+            }
+            System.out.println("Putting new table name: " + newTableName);
+            client.putName(mergedTableID, newTableName);
+            System.out.println("Dropping the old table name: " + tableName);
+            client.dropName(tableName);
         }
 
-        this.delete(path, false, true);
+        this.deleteInternal(path, false);
         // System.out.println("rename done");
-        lock.unlock();
 
         // System.out.println("return true 2");
-        // System.out.println("=================");
-        return true;
-    }
-    
-    private boolean delete(Path path, boolean b, boolean locked) throws IOException {
-        // System.out.println("=================");
-        // System.out.println("delete: " + path);
-        String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
-        pathStr = pathStr.replaceAll("//", "/");
-        if (!locked) {
-            lock.lock();
-        }
-        List<String> deleteList = new ArrayList<String>();
-        for (String key : fileMap.keySet()) {
-            if (key.startsWith(pathStr) && (key.length() == pathStr.length() || key.substring(pathStr.length()).charAt(0) == '/')) {
-                deleteList.add(key);
-            }
-        }
-        for (int i = 0; i < deleteList.size(); i++) {
-            fileMap.remove(deleteList.get(i));
-        }
-        // printAllFile ();
-        if (!locked) {
-            lock.unlock();
-        }
         // System.out.println("=================");
         return true;
     }
@@ -512,18 +465,19 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         List<FileStatus> result = new ArrayList<FileStatus>();
         String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
         pathStr = pathStr.replaceAll("//", "/");
-        lock.lock();
+
         // System.out.println("pathStr:" + pathStr);
-        for (String key : fileMap.keySet()) {
-            // System.out.println("key:" + key);
-            if (key.startsWith(pathStr) && key.length() > pathStr.length() && key.substring(pathStr.length()).charAt(0) == '/') {
-                if (key.substring(pathStr.length()).split("/").length == 2) {
-                    // System.out.println("find key:" + key);
-                    result.add(fileMap.get(key).getFileStatus());
+        try (val lock = this.lock.open()) {
+            for (String key : fileMap.keySet()) {
+                // System.out.println("key:" + key);
+                if (key.startsWith(pathStr) && key.length() > pathStr.length() && key.substring(pathStr.length()).charAt(0) == '/') {
+                    if (key.substring(pathStr.length()).split("/").length == 2) {
+                        // System.out.println("find key:" + key);
+                        result.add(fileMap.get(key).getFileStatus());
+                    }
                 }
             }
         }
-        lock.unlock();
         // System.out.println("Find num:"  + result.size());
         // System.out.println("=================");
         return result.toArray(new FileStatus[result.size()]);
@@ -547,20 +501,19 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
 
     @Override
     public boolean mkdirs(Path path, FsPermission fsPermission) throws IOException {
-        return this.mkdirs(path, fsPermission, false);
+        try (val lock = this.lock.open()) {
+            return this.mkdirsInternal(path, fsPermission);
+        }
     }
 
 
-    private boolean mkdirs(Path path, FsPermission fsPermission, boolean locked) throws IOException {
+    private boolean mkdirsInternal(Path path, FsPermission fsPermission) throws IOException {
         // System.out.println("=================");
         // System.out.println("mkdirs: " + path);
 
         // create dir with path and all parent dir
         String pathStr = path.toString().substring(path.toString().indexOf(":") + 1);
         pathStr = pathStr.replaceAll("//", "/");
-        if (!locked) {
-            lock.lock();
-        }
         if (!fileMap.containsKey(pathStr)) {
             // System.out.println("Dir not exists, create!");
             File file = new File(true, new FileStatus(1, true, 1, 1, 0, 0,
@@ -587,15 +540,18 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
             
             // printAllFile ();
         }
-        if (!locked) {
-            lock.unlock();
-        }
         // System.out.println("=================");
         return true;
     }
 
     @Override
     public FileStatus getFileStatus(Path path) throws IOException {
+        try (val lock = this.lock.open()) {
+            return this.getFileStatusInternal(path);
+        }
+    }
+
+    public FileStatus getFileStatusInternal(Path path) throws IOException {
         // System.out.println("=================");
         // System.out.println("getFileStatus: " + path.toString());
         // System.out.println("=================");
@@ -604,12 +560,10 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
         pathStr = pathStr.replaceAll("//", "/");
 
         FileStatus result = null;
-        lock.lock();
         if (fileMap.containsKey(pathStr)) {
             // System.out.println("File exists, return!");
             result =  fileMap.get(pathStr).getFileStatus();
             // printAllFile ();
-            lock.unlock();
             return result;
         }
         int stageDirIndex = pathStr.indexOf(HiveConf.getVar(conf, HiveConf.ConfVars.STAGINGDIR));
@@ -620,11 +574,9 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
                 path));
             fileMap.put(pathStr, file);
             // printAllFile ();
-            lock.unlock();
             return file.getFileStatus();
         }
         // System.out.println("return null");
-        lock.unlock();
         throw new FileNotFoundException();
     }
 

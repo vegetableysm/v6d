@@ -85,6 +85,12 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <!-- Hive logging -->
+    <dependency>
+      <groupId>com.lmax</groupId>
+      <artifactId>disruptor</artifactId>
+      <version>3.3.4</version>
+    </dependency>
 
     <!-- Apache Arrow -->
     <dependency>

@@ -56,7 +56,6 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, RowWritab
     public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
         System.out.println("getSplits");
         System.out.println("Utilities.getPlanPath(conf) in get splits is " + Utilities.getPlanPath(job));
-        (new Exception()).printStackTrace();
         List<InputSplit> splits = new ArrayList<InputSplit>();
         Path paths[] = FileInputFormat.getInputPaths(job);
 

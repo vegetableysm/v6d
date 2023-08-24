@@ -99,6 +99,14 @@ public class RecordBatchBuilder implements ObjectBuilder {
         return columnBuilders.get(index);
     }
 
+    public long getNumRows() {
+        return this.rows;
+    }
+
+    public long getNumColumns() {
+        return this.columnBuilders.size();
+    }
+
     @Override
     public void build(Client client) throws VineyardException {}
 
