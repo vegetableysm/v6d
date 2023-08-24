@@ -82,7 +82,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public ObjectMeta createMetaData(ObjectMeta meta) throws VineyardException {
+    public synchronized ObjectMeta createMetaData(ObjectMeta meta) throws VineyardException {
         meta.setInstanceId(this.instanceId);
         meta.setTransient();
         if (!meta.hasMeta("nbytes")) {
@@ -109,7 +109,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public ObjectMeta getMetaData(ObjectID id, boolean sync_remote, boolean wait)
+    public synchronized ObjectMeta getMetaData(ObjectID id, boolean sync_remote, boolean wait)
             throws VineyardException {
         val root = mapper.createObjectNode();
         GetDataRequest.put(root, id, sync_remote, wait);
@@ -144,7 +144,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public Collection<ObjectMeta> listMetaData(String pattern, boolean regex, int limit)
+    public synchronized Collection<ObjectMeta> listMetaData(String pattern, boolean regex, int limit)
             throws VineyardException {
         val root = mapper.createObjectNode();
         ListDataRequest.put(root, pattern, regex, limit);
@@ -173,7 +173,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public void persist(ObjectID id) throws VineyardException {
+    public synchronized void persist(ObjectID id) throws VineyardException {
         val root = mapper.createObjectNode();
         PersistRequest.put(root, id);
         this.doWrite(root);
@@ -182,7 +182,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public void delete(Collection<ObjectID> ids, boolean force, boolean deep)
+    public synchronized void delete(Collection<ObjectID> ids, boolean force, boolean deep)
             throws VineyardException {
         val root = mapper.createObjectNode();
         DeleteDataRequest.put(root, ids, force, deep, false);
@@ -192,7 +192,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public void putName(ObjectID id, String name) throws VineyardException {
+    public synchronized void putName(ObjectID id, String name) throws VineyardException {
         val root = mapper.createObjectNode();
         PutNameRequest.put(root, id, name);
         this.doWrite(root);
@@ -201,7 +201,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public ObjectID getName(String name, boolean wait) throws VineyardException {
+    public synchronized ObjectID getName(String name, boolean wait) throws VineyardException {
         val root = mapper.createObjectNode();
         GetNameRequest.put(root, name, wait);
         this.doWrite(root);
@@ -211,7 +211,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public void dropName(String name) throws VineyardException {
+    public synchronized void dropName(String name) throws VineyardException {
         val root = mapper.createObjectNode();
         DropNameRequest.put(root, name);
         this.doWrite(root);
@@ -220,7 +220,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public void createStream(final ObjectID id) throws VineyardException {
+    public synchronized void createStream(final ObjectID id) throws VineyardException {
         val root = mapper.createObjectNode();
         CreateStreamRequest.put(root, id);
         this.doWrite(root);
@@ -229,7 +229,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public void openStream(final ObjectID id, final char mode) throws VineyardException {
+    public synchronized void openStream(final ObjectID id, final char mode) throws VineyardException {
         val root = mapper.createObjectNode();
         VineyardException.asserts(
                 mode == 'r' || mode == 'w', "invalid mode to open stream: '" + mode + "'");
@@ -240,7 +240,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public void pushStreamChunk(final ObjectID id, final ObjectID chunk) throws VineyardException {
+    public synchronized void pushStreamChunk(final ObjectID id, final ObjectID chunk) throws VineyardException {
         val root = mapper.createObjectNode();
         PushNextStreamChunkRequest.put(root, id, chunk);
         this.doWrite(root);
@@ -249,7 +249,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public ObjectID pullStreamChunkID(final ObjectID id) throws VineyardException {
+    public synchronized ObjectID pullStreamChunkID(final ObjectID id) throws VineyardException {
         val root = mapper.createObjectNode();
         PullNextStreamChunkRequest.put(root, id);
         this.doWrite(root);
@@ -259,13 +259,13 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public ObjectMeta pullStreamChunkMeta(final ObjectID id) throws VineyardException {
+    public synchronized ObjectMeta pullStreamChunkMeta(final ObjectID id) throws VineyardException {
         val chunk = this.pullStreamChunkID(id);
         return this.getMetaData(chunk, false);
     }
 
     @Override
-    public void stopStream(final ObjectID id, boolean failed) throws VineyardException {
+    public synchronized void stopStream(final ObjectID id, boolean failed) throws VineyardException {
         val root = mapper.createObjectNode();
         StopStreamRequest.put(root, id, failed);
         this.doWrite(root);
@@ -274,7 +274,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public InstanceStatus getInstanceStatus() throws VineyardException {
+    public synchronized InstanceStatus getInstanceStatus() throws VineyardException {
         val root = mapper.createObjectNode();
         InstanceStatusRequest.put(root);
         this.doWrite(root);
@@ -284,7 +284,7 @@ public class IPCClient extends Client {
     }
 
     @Override
-    public ClusterStatus getClusterStatus() throws VineyardException {
+    public synchronized ClusterStatus getClusterStatus() throws VineyardException {
         val root = mapper.createObjectNode();
         ClusterStatusRequest.put(root);
         this.doWrite(root);
@@ -293,7 +293,7 @@ public class IPCClient extends Client {
         return ClusterStatus.fromJson(reply.getStatus());
     }
 
-    public Buffer createBuffer(long size) throws VineyardException {
+    public synchronized Buffer createBuffer(long size) throws VineyardException {
         if (size == 0) {
             return Buffer.empty();
         }
@@ -312,7 +312,7 @@ public class IPCClient extends Client {
         return buffer;
     }
 
-    public void sealBlob(ObjectID id) throws VineyardException {
+    public synchronized void sealBlob(ObjectID id) throws VineyardException {
         val root = mapper.createObjectNode();
         SealRequest.put(root, id);
         this.doWrite(root);

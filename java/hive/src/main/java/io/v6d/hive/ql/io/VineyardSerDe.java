@@ -19,6 +19,8 @@ import java.util.Properties;
 import java.util.List;
 import java.util.ArrayList;
 
+import com.google.common.base.Stopwatch;
+import com.google.common.base.StopwatchContext;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.io.arrow.ArrowColumnarBatchSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
@@ -33,9 +35,15 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.io.Writable;
 import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils.getStandardWritableObjectInspectorFromTypeInfo;
 
+import lombok.val;
+
 public class VineyardSerDe extends ArrowColumnarBatchSerDe {
     StructTypeInfo rowTypeInfo;
     private TypeInfo[] targetTypeInfos;
+
+    private long elements = 0;
+    private Stopwatch serializeWatch = StopwatchContext.createUnstarted();
+    private Stopwatch deserializeWatch = StopwatchContext.createUnstarted();
 
     @Override
     public void initialize(Configuration configuration, Properties tableProperties)
@@ -86,15 +94,29 @@ public class VineyardSerDe extends ArrowColumnarBatchSerDe {
 
     @Override
     public VineyardRowWritable serialize(Object obj, ObjectInspector objInspector) {
+        serializeWatch.start();
         List<Object> standardObjects = new ArrayList<Object>();
         ObjectInspectorUtils.copyToStandardObject(standardObjects, obj,
             ((StructObjectInspector) objInspector), ObjectInspectorUtils.ObjectInspectorCopyOption.WRITABLE);
-        return new VineyardRowWritable(standardObjects, targetTypeInfos);
+        val writable = new VineyardRowWritable(standardObjects, targetTypeInfos);
+        serializeWatch.stop();
+        elements++;
+        if (elements % 1000000 == 0){
+            Context.printf("serialize %d elements use %s\n", elements, serializeWatch.toString());
+        }
+        return writable;
     }
 
     @Override
     public Object deserialize(Writable writable) {
+        deserializeWatch.start();
         // System.out.println("deserialize called");
-        return ((RowWritable) writable).getValues();
+        val values = ((RowWritable) writable).getValues();
+        deserializeWatch.start();
+        elements++;
+        if (elements % 1000000 ==0 ){
+            Context.printf("deserialize %d elements use %s\n", elements, deserializeWatch.toString());
+        }
+        return values;
     }
 }

@@ -14,6 +14,8 @@
  */
 package io.v6d.hive.ql.io;
 
+import com.google.common.base.Stopwatch;
+import com.google.common.base.StopwatchContext;
 import io.v6d.core.common.util.VineyardException;
 import io.v6d.core.client.IPCClient;
 import io.v6d.core.client.ds.ObjectMeta;
@@ -91,6 +93,8 @@ public class VineyardOutputFormat<K extends NullWritable, V extends VineyardRowW
 }
 
 class SinkRecordWriter implements FileSinkOperator.RecordWriter {
+    private static Logger logger = LoggerFactory.getLogger(SinkRecordWriter.class);
+
     private static CloseableReentrantLock lock = new CloseableReentrantLock();
 
     private JobConf jc;
@@ -106,16 +110,13 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     private Progressable progress;
 
     // vineyard
-    private IPCClient client;
     private TableBuilder tableBuilder;
     private SchemaBuilder schemaBuilder;
     RecordBatchBuilder recordBatchBuilder;
     List<RecordBatchBuilder> recordBatchBuilders;
     private String tableName;
 
-    //timer
-    private long startTime;
-    private long endTime;
+    private Stopwatch writeTimer = StopwatchContext.createUnstarted();
 
     public static final PathFilter VINEYARD_FILES_PATH_FILTER = new PathFilter() {
         @Override
@@ -145,7 +146,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             boolean isCompressed,
             Properties tableProperties,
             Progressable progress) throws IOException {
-        startTime = System.currentTimeMillis();
+        val watch = StopwatchContext.create();
         this.jc = jc;
         if (!ArrowWrapperWritable.class.isAssignableFrom(valueClass)) {
             throw new VineyardException.Invalid("value class must be ArrowWrapperWritable");
@@ -157,22 +158,10 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         this.tableProperties = tableProperties;
         this.progress = progress;
 
-        for (Object key : tableProperties.keySet()) {
-            System.out.printf("table property: %s, %s\n", key, tableProperties.getProperty((String) key));
-        }
+        // for (Object key : tableProperties.keySet()) {
+        //     System.out.printf("table property: %s, %s\n", key, tableProperties.getProperty((String) key));
+        // }
         getTableName();
-
-        // connect to vineyard
-        if (client == null) {
-            // TBD: get vineyard socket path from table properties
-            client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
-        }
-        if (client == null || !client.connected()) {
-            throw new VineyardException.Invalid("failed to connect to vineyard");
-        } else {
-            System.out.printf("Connected to vineyard succeed!\n");
-            System.out.printf("Hello vineyard!\n");
-        }
 
         // objects = new ArrayList<VineyardRowWritable>();
         objects = new ArrayList<VineyardRowWritable[]>();
@@ -181,32 +170,33 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         currentRows = rows;
         objects.add(rows);
         Arrow.instantiate();
+
+        Context.println("creating a sink record writer uses: " + watch.stop());
     }
 
     @Override
     public void write(Writable w) throws IOException {
-        // System.out.println("Write");
+        writeTimer.start();
+        // Context.println("Write");
         // if (w == null) {
-        //     System.out.println("w is null");
+        //     Context.println("w is null");
         //     return;
         // }
 
         VineyardRowWritable rowWritable = (VineyardRowWritable) w;
-        // System.out.println("value:" + (rowWritable.getValues().get(0)) + " " + (rowWritable.getValues().get(1)));
+        // Context.println("value:" + (rowWritable.getValues().get(0)) + " " + (rowWritable.getValues().get(1)));
         // objects.add(rowWritable);
         if (lastBatchIndex < batchSize) {
             currentRows[lastBatchIndex++] = rowWritable;
         } else {
-            System.out.println("Record batch is full. Create new batch!");
-            endTime = System.currentTimeMillis();
-            System.out.println("Fill a record batch cost:" + (endTime - startTime) / 1000 + "s.");
-            startTime = System.currentTimeMillis();
+            Context.println("Record batch is full. Create new batch!");
             VineyardRowWritable[] rows = new VineyardRowWritable[batchSize];
             currentRows = rows;
             objects.add(rows);
             lastBatchIndex = 0;
             currentRows[lastBatchIndex++] = rowWritable;
         }
+        writeTimer.stop();
     }
     
     // check if the table is already created.
@@ -216,61 +206,32 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     @Override
     public void close(boolean abort) throws IOException {
         // Table oldTable = null;
-        startTime = System.currentTimeMillis();
         if (objects.get(0)[0] == null) {
-            System.out.println("No data to write.");
-            client.disconnect();
-            System.out.println("Bye, vineyard!");
+            Context.println("No data to write.");
             return;
         }
-        System.out.println("objects size:" + objects.size());
+        Context.println("closing SinkRecordWriter: objects size:" + objects.size() + ", write uses " + writeTimer);
 
         // construct record batch
-        constructRecordBatch();
-        endTime = System.currentTimeMillis();
-        System.out.println("Construct record batch cost:" + (endTime - startTime) / 1000 + "s.");
-
-        startTime = System.currentTimeMillis();
+        val client = Context.getClient();
+        constructRecordBatch(client);
         tableBuilder = new TableBuilder(client, schemaBuilder);
 
         try (val lock = this.lock.open()) {
+            val watch = StopwatchContext.create();
             for (int i = 0; i < recordBatchBuilders.size(); i++) {
-                System.out.println("record batch builder: " + i + ", row size: " + recordBatchBuilders.get(i).getNumRows());
+                Context.println("record batch builder: " + i + ", row size: " + recordBatchBuilders.get(i).getNumRows());
                 tableBuilder.addBatch(recordBatchBuilders.get(i));
             }
             ObjectMeta meta = tableBuilder.seal(client);
-            System.out.println("Table id in vineyard:" + meta.getId().value());
+            Context.println("Table id in vineyard:" + meta.getId().value());
             client.persist(meta.getId());
-            System.out.println("Table persisted, name:" + tableName);
+            Context.println("Table persisted, name:" + tableName);
 
             client.putName(meta.getId(), tableName);
-            System.out.println("record batch size:" + tableBuilder.getBatchSize());
+            Context.println("record batch size:" + tableBuilder.getBatchSize());
+            Context.println("construct table from record batch builders use " + watch.stop());
         }
-
-        // TBD: Does there exists competition between different tasks?
-        // try {
-            // ObjectID objectID = client.getName(tableName, false);
-            // if (objectID == null) {
-            //     System.out.println("Table not exist.");
-            // } else {
-            //     oldTable = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(objectID));
-            // }
-        //     client.getName(tableName, false);
-        //     System.out.println("Table exist.");
-        // } catch (Exception e) {
-        //     System.out.println("Get table id failed");
-        // }
-
-        // if (oldTable != null) {
-        //     for (int i = 0; i < oldTable.getBatches().size(); i++) {
-        //         tableBuilder.addBatch(oldTable.getBatches().get(i));
-        //     }
-        // }
-
-        client.disconnect();
-        System.out.println("Bye, vineyard!");
-        endTime = System.currentTimeMillis();
-        System.out.println("Seal table cost:" + (endTime - startTime) / 1000 + "s.");
     }
 
     private static ArrowType toArrowType(TypeInfo typeInfo) {
@@ -326,7 +287,8 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         }
     }
 
-    private void constructRecordBatch() throws VineyardException {
+    private void constructRecordBatch(IPCClient client) throws VineyardException {
+        val watch = StopwatchContext.create();
         // construct schema
         // StructVector rootVector = StructVector.empty(null, allocator);
         List<Field> fields = new ArrayList<Field>();
@@ -347,16 +309,17 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
                 rowCount = lastBatchIndex;
             }
             recordBatchBuilder = new RecordBatchBuilder(client, schema, rowCount);
-            System.out.println("Create done!");
+            Context.println("Create done!");
             fillRecordBatchBuilder(schema, objects.get(i), rowCount);
-            System.out.println("Fill done!");
+            Context.println("Fill done!");
             recordBatchBuilders.add(recordBatchBuilder);
         }
+        Context.println("construct a record batch use " + watch.stop() + ", number of rows: " + objects.size());
     }
 
     private void fillRecordBatchBuilder(Schema schema, VineyardRowWritable[] batch, int rowCount) throws VineyardException {
-        // int rowCount = objects.size();
-        System.out.println("rowCount: " + rowCount);
+        val watch = StopwatchContext.create();
+        Context.println("rowCount: " + rowCount);
         for (int i = 0; i < schema.getFields().size(); i++) {
             ColumnarDataBuilder column;
             column = recordBatchBuilder.getColumnBuilder(i);
@@ -412,7 +375,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
                     column.setDouble(j, value);
                 }
             } else if (field.getType().equals(Arrow.Type.VarChar)) {
-                System.out.println("var char");
+                Context.println("var char");
                 // may be not correct
                 for (int j = 0; j < rowCount; j++) {
                     String value;
@@ -424,18 +387,19 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
                     column.setUTF8String(j, new org.apache.arrow.vector.util.Text(value));
                 }
             } else {
-                System.out.println("Type:" + field.getType() + " is not supported");
-                // throw new VineyardException.NotImplemented(
-                //         "array builder for type " + field.getType() + " is not supported");
+                Context.println("Type:" + field.getType() + " is not supported");
+                throw new VineyardException.NotImplemented(
+                        "array builder for type " + field.getType() + " is not supported");
             }
         }
+        Context.println("filling record batch builder use " + watch.stop());
     }
 }
 
 class MapredRecordWriter<K extends NullWritable, V extends VineyardRowWritable>
         implements RecordWriter<K, V> {
     MapredRecordWriter() throws IOException {
-        System.out.printf("creating vineyard record writer\n");
+        Context.println("creating vineyard record writer");
         throw new RuntimeException("mapred record writter: unimplemented");
     }
 

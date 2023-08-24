@@ -26,7 +26,7 @@ class VineyardRowWritable extends ArrowWrapperWritable {
         final List<? extends StructField> fields = rowObjectInspector.getAllStructFieldRefs();
         final int count = fields.size();
         long endTime = System.nanoTime();
-        System.out.println("Stage 1 takes " + (endTime - startTime) + " ns");
+        Context.println("Stage 1 takes " + (endTime - startTime) + " ns");
         targetTypeInfos = new TypeInfo[count];
         for (int i = 0; i < count; i++) {
             final StructField field = fields.get(i);
@@ -36,8 +36,8 @@ class VineyardRowWritable extends ArrowWrapperWritable {
 
             targetTypeInfos[i] = typeInfo;
         }
-        System.out.println("Stage 2 takes " + (System.nanoTime() - endTime) + " ns");
-        // System.out.println("Create row writable takes " + (System.nanoTime() - startTime) + " ns");
+        Context.println("Stage 2 takes " + (System.nanoTime() - endTime) + " ns");
+        // Context.println("Create row writable takes " + (System.nanoTime() - startTime) + " ns");
     }
 
     public VineyardRowWritable(final List<Object> colValues, TypeInfo[] targetTypeInfos) {
@@ -55,13 +55,13 @@ class VineyardRowWritable extends ArrowWrapperWritable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        System.out.println("write");
+        Context.println("write");
         throw new IOException("write is not implemented");
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        System.out.println("readFields");
+        Context.println("readFields");
         throw new IOException("readFields is not implemented");
     }
 }

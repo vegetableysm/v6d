@@ -119,6 +119,12 @@
       <artifactId>arrow-vector</artifactId>
     </dependency>
 
+    <!-- Utils -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+    </dependency>
+
     <!-- Test -->
     <dependency>
       <groupId>junit</groupId>

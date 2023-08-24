@@ -45,14 +45,14 @@ import org.slf4j.LoggerFactory;
 public class VineyardVectorizedInputFormat extends HiveInputFormat<NullWritable, VectorizedRowBatch> implements VectorizedInputFormatInterface {
     public VineyardVectorizedInputFormat() {
         super();
-        System.out.println("VineyardInputFormat");
+        Context.println("VineyardInputFormat");
     }
 
     @Override
     public RecordReader<NullWritable, VectorizedRowBatch>
     getRecordReader(InputSplit genericSplit, JobConf job, Reporter reporter)
             throws IOException {
-        System.out.println("getRecordReader");
+        Context.println("getRecordReader");
         reporter.setStatus(genericSplit.toString());
         return new VineyardBatchRecordReader(job, (VineyardSplit) genericSplit);
     }
@@ -64,8 +64,8 @@ public class VineyardVectorizedInputFormat extends HiveInputFormat<NullWritable,
 
     @Override
     public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
-        System.out.println("getSplits");
-        System.out.println("Utilities.getPlanPath(conf) in get splits is " + Utilities.getPlanPath(job));
+        Context.println("getSplits");
+        Context.println("Utilities.getPlanPath(conf) in get splits is " + Utilities.getPlanPath(job));
         (new Exception()).printStackTrace();
         List<InputSplit> splits = new ArrayList<InputSplit>();
         Path paths[] = FileInputFormat.getInputPaths(job);
@@ -76,7 +76,7 @@ public class VineyardVectorizedInputFormat extends HiveInputFormat<NullWritable,
         try {
             client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
         } catch (Exception e) {
-            System.out.println("Connect vineyard failed.");
+            Context.println("Connect vineyard failed.");
             return splits.toArray(new VineyardSplit[splits.size()]);
         }
         Arrow.instantiate();
@@ -85,21 +85,21 @@ public class VineyardVectorizedInputFormat extends HiveInputFormat<NullWritable,
         tableObjectID = new ObjectID[paths.length];
         for (int i = 0; i < paths.length; i++) {
             // int index = path.toString().lastIndexOf("/");
-            // System.out.println("Path:" + path.toString());
+            // Context.println("Path:" + path.toString());
             // String tableName = path.toString().substring(index + 1);
 
             // Construct table name.
             Path path = paths[i];
             String tableName = path.toString();
             tableName = tableName.replace("/", "#");
-            System.out.println("table name:" + tableName);
+            Context.println("table name:" + tableName);
 
             // Get table from vineyard.
             try {
                 tableObjectID[i] = client.getName(tableName);
                 table[i] = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(tableObjectID[i]));
             } catch (Exception e) {
-                System.out.println("Get table failed");
+                Context.println("Get table failed");
                 VineyardSplit vineyardSplit = new VineyardSplit(path, 0, 0, job);
                 splits.add(vineyardSplit);
                 return splits.toArray(new VineyardSplit[splits.size()]);
@@ -131,10 +131,10 @@ public class VineyardVectorizedInputFormat extends HiveInputFormat<NullWritable,
         for (int i = 0; i < partitionsSplitCount.length; i++) {
             int partitionSplitCount = partitionsSplitCount[i];
             int partitionBatchSize = table[i].getBatches().size() / partitionSplitCount;
-            System.out.println("partitionBatchSize:" + partitionBatchSize);
+            Context.println("partitionBatchSize:" + partitionBatchSize);
             for (int j = 0; j < partitionSplitCount; j++) {
                 VineyardSplit vineyardSplit = new VineyardSplit(paths[i], 0, "1 3".getBytes().length, job);
-                System.out.println("split path:" + paths[i].toString());
+                Context.println("split path:" + paths[i].toString());
                 if (j == partitionSplitCount - 1) {
                     vineyardSplit.setBatch(j * partitionBatchSize, table[i].getBatches().size() - j * partitionBatchSize);
                 } else {
@@ -157,18 +157,18 @@ public class VineyardVectorizedInputFormat extends HiveInputFormat<NullWritable,
             //     }
             //     splits.add(vineyardSplit);
             // }
-        System.out.println("num split:" + numSplits + " real num split:" + realNumSplits);
-        System.out.println("table length:" + table.length);
+        Context.println("num split:" + numSplits + " real num split:" + realNumSplits);
+        Context.println("table length:" + table.length);
         for (int i = 0; i < table.length; i++) {
-            System.out.println("table[" + i + "] batch size:" + table[i].getBatches().size());
-            System.out.println("table[" + i + "] split count:" + partitionsSplitCount[i]);
+            Context.println("table[" + i + "] batch size:" + table[i].getBatches().size());
+            Context.println("table[" + i + "] split count:" + partitionsSplitCount[i]);
         }
         client.disconnect();
-        System.out.println("Splits size:" + splits.size());
+        Context.println("Splits size:" + splits.size());
         for (int i = 0; i < splits.size(); i++) {
-            System.out.println("Split[" + i + "] length:" + splits.get(i).getLength());
+            Context.println("Split[" + i + "] length:" + splits.get(i).getLength());
         }
-        System.out.println("Utilities.getPlanPath(conf) in get splits is " + Utilities.getPlanPath(job));
+        Context.println("Utilities.getPlanPath(conf) in get splits is " + Utilities.getPlanPath(job));
         // HiveConf.setVar(job, HiveConf.ConfVars.PLAN, "vineyard:///");
         return splits.toArray(new VineyardSplit[splits.size()]);
     }
@@ -194,12 +194,12 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
     private boolean addPartitionCols = true;
 
     VineyardBatchRecordReader(JobConf job, VineyardSplit split) throws IOException {
-        System.out.println("VineyardBatchRecordReader");
+        Context.println("VineyardBatchRecordReader");
         String path = split.getPath().toString();
         // int index = path.lastIndexOf("/");
         // tableName = path.substring(index + 1);
         tableName = path.replace('/', '#');
-        System.out.println("Table name:" + tableName);
+        Context.println("Table name:" + tableName);
         tableNameValid = true;
 
         batchStartIndex = split.getBatchStartIndex();
@@ -211,24 +211,24 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
             try {
                 client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
             } catch (Exception e) {
-                System.out.println("connect to vineyard failed!");
-                System.out.println(e.getMessage());
+                Context.println("connect to vineyard failed!");
+                Context.println(e.getMessage());
             }
         }
         if (client == null || !client.connected()) {
-            System.out.println("connected to vineyard failed!");
+            Context.println("connected to vineyard failed!");
             return;
         } else {
-            System.out.println("connected to vineyard succeed!");
-            System.out.println("Hello, vineyard!");
+            Context.println("connected to vineyard succeed!");
+            Context.println("Hello, vineyard!");
         }
 
         Arrow.instantiate();
         // HiveConf.setVar(job, HiveConf.ConfVars.PLAN, "vineyard:///");
-        System.out.println("flag is :" + HiveConf.getBoolVar(job, HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED));
+        Context.println("flag is :" + HiveConf.getBoolVar(job, HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED));
         HiveConf.setBoolVar(job, HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED, true);
-        System.out.println("Utilities.getPlanPath(conf) is " + Utilities.getPlanPath(job));
-        System.out.println("Map work:" + Utilities.getMapWork(job));
+        Context.println("Utilities.getPlanPath(conf) is " + Utilities.getPlanPath(job));
+        Context.println("Map work:" + Utilities.getMapWork(job));
         // ctx = Utilities.getVectorizedRowBatchCtx(job);
 
         // int partitionColumnCount = ctx.getPartitionColumnCount();
@@ -240,7 +240,7 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
     public void close() throws IOException {
         if(client != null && client.connected()) {
             client.disconnect();
-            System.out.println("Bye, vineyard!");
+            Context.println("Bye, vineyard!");
         }
     }
 
@@ -272,8 +272,8 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
     private void arrowToVectorizedRowBatch(VectorizedRowBatch batch) {
         // batch.numCols = recordBatch.getFieldVectors().size();
         int remaining = vectorSchemaRoot.getRowCount() - recordBatchInnerIndex;
-        System.out.println("partition column:" + batch.getPartitionColumnCount());
-        System.out.println("Data column count:" + batch.getDataColumnCount());
+        Context.println("partition column:" + batch.getPartitionColumnCount());
+        Context.println("Data column count:" + batch.getDataColumnCount());
 
         /*
          * When we use SQL with condition to query data, the recordBatchSize may be large than VectorizedRowBatch.DEFAULT_SIZE, 
@@ -341,7 +341,7 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
                 }
                 batch.cols[i] = vector;
             } else {
-                System.out.println("array builder for type " + field.getType() + " is not supported");
+                Context.println("array builder for type " + field.getType() + " is not supported");
                 throw new UnsupportedOperationException("array builder for type " + field.getType() + " is not supported");
             }
         }
@@ -355,17 +355,17 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
 
     @Override
     public boolean next(NullWritable key, VectorizedRowBatch value) throws IOException {
-        System.out.println("next");
+        Context.println("next");
         if (tableNameValid) {
             if (table == null) {
                 try {
-                    System.out.println("Get objdect id:" + tableName);
+                    Context.println("Get objdect id:" + tableName);
                     ObjectID objectID = client.getName(tableName, false);
                     if (objectID != null)
-                        System.out.println("get object done");
+                        Context.println("get object done");
                     table = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(objectID));
                 } catch (Exception e) {
-                    System.out.println("Get objectID failed.");
+                    Context.println("Get objectID failed.");
                     return false;
                 }
             }
@@ -376,7 +376,7 @@ class VineyardBatchRecordReader implements RecordReader<NullWritable, Vectorized
                 vectorSchemaRoot = table.getArrowBatch(recordBatchIndex);
             }
             if (vectorSchemaRoot == null) {
-                System.out.println("Get vector schema root failed.");
+                Context.println("Get vector schema root failed.");
                 return false;
             }
 
