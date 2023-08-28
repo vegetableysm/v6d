@@ -16,6 +16,8 @@ package io.v6d.hive.ql.io;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.StopwatchContext;
+
+import io.v6d.core.common.util.ObjectID;
 import io.v6d.core.common.util.VineyardException;
 import io.v6d.core.client.IPCClient;
 import io.v6d.core.client.ds.ObjectMeta;
@@ -26,6 +28,7 @@ import io.v6d.modules.basic.arrow.Arrow;
 import io.v6d.modules.basic.arrow.RecordBatchBuilder;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Properties;
@@ -114,7 +117,8 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     private SchemaBuilder schemaBuilder;
     RecordBatchBuilder recordBatchBuilder;
     List<RecordBatchBuilder> recordBatchBuilders;
-    private String tableName;
+    // private String tableName;
+    private FSDataOutputStream output;
 
     private Stopwatch writeTimer = StopwatchContext.createUnstarted();
 
@@ -127,15 +131,10 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
     };
 
     private void getTableName() throws IOException {
-        tableName = finalOutPath.toString();
-        tableName = tableName.substring(0, tableName.lastIndexOf("/"));
-        tableName = tableName.replaceAll("/", "#");
-
         fs = finalOutPath.getFileSystem(jc);
-        FSDataOutputStream output = FileSystem.create(fs, finalOutPath, new FsPermission("777"));
-        if (output != null) {
-            output.write((tableName).getBytes(StandardCharsets.UTF_8), 0, (tableName).getBytes(StandardCharsets.UTF_8).length);
-            output.close();
+        this.output = FileSystem.create(fs, finalOutPath, new FsPermission("777"));
+        if (output == null) {
+            throw new VineyardException.Invalid("Create table file failed.");
         }
     }
 
@@ -226,11 +225,13 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
             ObjectMeta meta = tableBuilder.seal(client);
             Context.println("Table id in vineyard:" + meta.getId().value());
             client.persist(meta.getId());
-            Context.println("Table persisted, name:" + tableName);
+            // Context.println("Table persisted, name:" + tableName);
 
-            client.putName(meta.getId(), tableName);
+            // client.putName(meta.getId(), tableName);
             Context.println("record batch size:" + tableBuilder.getBatchSize());
             Context.println("construct table from record batch builders use " + watch.stop());
+            output.write((Long.toString(meta.getId().value()) + "\n").getBytes(StandardCharsets.UTF_8));
+            output.close();
         }
     }
 

@@ -112,7 +112,7 @@ public class VineyardSerDe extends ArrowColumnarBatchSerDe {
         deserializeWatch.start();
         // System.out.println("deserialize called");
         val values = ((RowWritable) writable).getValues();
-        deserializeWatch.start();
+        deserializeWatch.stop();
         elements++;
         if (elements % 1000000 ==0 ){
             Context.printf("deserialize %d elements use %s\n", elements, deserializeWatch.toString());

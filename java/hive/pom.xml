@@ -119,6 +119,12 @@
       <artifactId>arrow-vector</artifactId>
     </dependency>
 
+    <dependency>
+      <groupId>com.google.jimfs</groupId>
+      <artifactId>jimfs</artifactId>
+      <version>1.0</version>
+    </dependency>
+
     <!-- Utils -->
     <dependency>
       <groupId>com.google.guava</groupId>
