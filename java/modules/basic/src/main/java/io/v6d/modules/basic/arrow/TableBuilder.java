@@ -16,6 +16,8 @@ package io.v6d.modules.basic.arrow;
 
 import static java.util.Objects.requireNonNull;
 
+import com.google.common.base.Stopwatch;
+import com.google.common.base.StopwatchContext;
 import io.v6d.core.client.Client;
 import io.v6d.core.client.IPCClient;
 import io.v6d.core.client.ds.ObjectBase;
@@ -69,7 +71,9 @@ public class TableBuilder implements ObjectBuilder {
 
     @Override
     public ObjectMeta seal(Client client) throws VineyardException {
+        Stopwatch watch = StopwatchContext.create();
         this.build(client);
+        System.out.println("table builder: build uses  "+ watch);
 
         val meta = ObjectMeta.empty();
 
@@ -84,7 +88,10 @@ public class TableBuilder implements ObjectBuilder {
             meta.addMember("__batches_-" + index, batches.get(index).seal(client));
         }
         meta.setNBytes(0); // FIXME
+        System.out.println("table builder: construct metadata uses  "+ watch);
 
-        return client.createMetaData(meta);
+        val metadata = client.createMetaData(meta);
+        System.out.println("table builder: client create metadata uses  "+ watch);
+        return metadata;
     }
 }

@@ -12,10 +12,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.v6d.hive.ql.io;
+package io.v6d.core.client;
 
 import com.google.common.base.Stopwatch;
-import io.v6d.core.client.IPCClient;
+import com.google.common.base.StopwatchContext;
 import io.v6d.core.common.util.VineyardException;
 
 import java.text.SimpleDateFormat;
@@ -26,8 +26,9 @@ public class Context {
 
     public static synchronized IPCClient getClient() throws VineyardException {
         if (client == null) {
-            client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
-            System.out.println("Connected to vineyard: " + System.getenv("VINEYARD_IPC_SOCKET"));
+            Stopwatch watch = StopwatchContext.create();
+            client = new IPCClient();
+            System.out.println("Connected to vineyard: " + client.getIPCSocket() + " uses " + watch.stop());
         }
         return client;
     }

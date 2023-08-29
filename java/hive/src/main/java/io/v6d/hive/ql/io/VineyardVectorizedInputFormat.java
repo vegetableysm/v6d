@@ -14,6 +14,7 @@
  */
 package io.v6d.hive.ql.io;
 
+import io.v6d.core.client.Context;
 import io.v6d.core.client.IPCClient;
 import io.v6d.core.client.ds.ObjectFactory;
 import io.v6d.core.common.util.ObjectID;

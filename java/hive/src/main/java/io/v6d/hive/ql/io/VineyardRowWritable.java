@@ -5,6 +5,7 @@ import java.io.DataInput;
 import java.io.IOException;
 import java.util.List;
 
+import io.v6d.core.client.Context;
 import org.apache.hadoop.hive.ql.io.arrow.ArrowWrapperWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;

@@ -59,7 +59,12 @@ public class IPCClient extends Client {
         mapper = new ObjectMapper();
         mapper.configure(SerializationFeature.INDENT_OUTPUT, false);
         mmapTable = new HashMap<>();
-        this.connect(System.getenv("VINEYARD_IPC_SOCKET"));
+        val ipc_socket = System.getenv(Client.DEFAULT_IPC_SOCKET_KEY);
+        if (ipc_socket == null) {
+            throw new VineyardException.ConnectionFailed("Failed to resolve default vineyard IPC socket, "
+                    + "please make sure the environment variable " + Client.DEFAULT_IPC_SOCKET_KEY + " is set.");
+        }
+        this.connect(ipc_socket);
     }
 
     public IPCClient(String ipc_socket) throws VineyardException {
@@ -83,6 +88,7 @@ public class IPCClient extends Client {
 
     @Override
     public synchronized ObjectMeta createMetaData(ObjectMeta meta) throws VineyardException {
+        Context.println("start create metadata");
         meta.setInstanceId(this.instanceId);
         meta.setTransient();
         if (!meta.hasMeta("nbytes")) {
@@ -93,6 +99,7 @@ public class IPCClient extends Client {
         this.doWrite(root);
         val reply = new CreateDataReply();
         reply.get(this.doReadJson());
+        Context.println("stop create metadata");
         if (meta.isIncomplete()) {
             return getMetaData(reply.getId());
         } else {
@@ -193,20 +200,24 @@ public class IPCClient extends Client {
 
     @Override
     public synchronized void putName(ObjectID id, String name) throws VineyardException {
+        Context.println("start put name: " + name);
         val root = mapper.createObjectNode();
         PutNameRequest.put(root, id, name);
         this.doWrite(root);
         val reply = new PutNameReply();
         reply.get(this.doReadJson());
+        Context.println("finish put name: " + name);
     }
 
     @Override
     public synchronized ObjectID getName(String name, boolean wait) throws VineyardException {
+        Context.println("start get name: " + name);
         val root = mapper.createObjectNode();
         GetNameRequest.put(root, name, wait);
         this.doWrite(root);
         val reply = new GetNameReply();
         reply.get(this.doReadJson());
+        Context.println("finish get name: " + reply.getId());
         return reply.getId();
     }
 

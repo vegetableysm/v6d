@@ -59,8 +59,8 @@ public class RecordBatchBuilder implements ObjectBuilder {
         this.schemaMutable = false;
         this.rows = rows;
 
-        this.columnBuilders = requireNonNull(columnBuilders, "column builders is null");
         // Fill array builder in the future.
+        this.columnBuilders = requireNonNull(columnBuilders, "column builders is null");
     }
 
     public void addField(final Field field) throws VineyardException {
@@ -94,9 +94,9 @@ public class RecordBatchBuilder implements ObjectBuilder {
         return columnBuilders;
     }
 
-    public ColumnarDataBuilder getColumnBuilder(int index) throws VineyardException {
+    public ColumnarDataBuilder getColumnBuilder(int column_index) throws VineyardException {
         VineyardException.asserts(!schemaMutable, "the schema builder is not finished yet");
-        return columnBuilders.get(index);
+        return columnBuilders.get(column_index);
     }
 
     public long getNumRows() {

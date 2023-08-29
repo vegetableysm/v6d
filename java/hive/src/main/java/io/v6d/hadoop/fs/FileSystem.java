@@ -31,7 +31,8 @@ import java.util.Queue;
 import com.google.common.base.StopwatchContext;
 import com.google.common.jimfs.Jimfs;
 
-import io.v6d.hive.ql.io.Context;
+import io.v6d.core.client.Context;
+import io.v6d.hive.ql.io.TypeContext;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.permission.FsPermission;
