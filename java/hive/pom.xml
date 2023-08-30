@@ -140,6 +140,16 @@
     </dependency>
   </dependencies>
 
+  <!-- Override the conjars url as the original server has down -->
+  <repositories>
+    <repository>
+      <id>conjars</id>
+      <name>conjars</name>
+      <layout>default</layout>
+      <url>https://repository.mapr.com/nexus/content/groups/mapr-public/conjars</url>
+    </repository>
+  </repositories>
+
   <build>
     <plugins>
       <plugin>
