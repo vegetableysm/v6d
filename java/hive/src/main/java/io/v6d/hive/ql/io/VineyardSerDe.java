@@ -23,6 +23,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeStats;
+import org.apache.hadoop.hive.serde2.lazy.LazyFactory;
+import org.apache.hadoop.hive.serde2.lazy.LazySerDeParameters;
+import org.apache.hadoop.hive.serde2.lazy.LazyStruct;
+import org.apache.hadoop.hive.serde2.lazy.objectinspector.primitive.LazyObjectInspectorParametersImpl;
 import org.apache.hadoop.hive.serde2.objectinspector.*;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
@@ -36,6 +40,9 @@ public class VineyardSerDe extends AbstractSerDe {
     private TypeInfo[] targetTypeInfos;
     private StructObjectInspector objectInspector;
     private ObjectInspector[] objectInspectors;
+
+    private ObjectInspector lazyObjectInspector;
+    private LazyStruct cachedLazyStruct;
 
     private RecordWrapperWritable writable = new RecordWrapperWritable();
 
@@ -54,6 +61,13 @@ public class VineyardSerDe extends AbstractSerDe {
         this.targetTypeInfos = TypeContext.computeTargetTypeInfos(this.rowTypeInfo, ObjectInspectorUtils.ObjectInspectorCopyOption.WRITABLE);
         this.objectInspector = (StructObjectInspector) TypeInfoUtils.getStandardWritableObjectInspectorFromTypeInfo (this.rowTypeInfo);
         this.objectInspectors = this.objectInspector.getAllStructFieldRefs().stream().map(f -> f.getFieldObjectInspector()).toArray(ObjectInspector[]::new);
+
+        // val lazyParameters = new LazySerDeParameters(configuration, tableProperties, getClass().getName());
+        // lazyObjectInspector = LazyFactory.createLazyStructInspector(
+        //         lazyParameters.getColumnNames(),
+        //         lazyParameters.getColumnTypes(),
+        //         new LazyObjectInspectorParametersImpl(lazyParameters));
+        // cachedLazyStruct = (LazyStruct) LazyFactory.createLazyObject(lazyObjectInspector);
     }
 
     @Override

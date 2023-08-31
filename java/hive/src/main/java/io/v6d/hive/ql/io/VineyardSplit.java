@@ -30,6 +30,11 @@ public class VineyardSplit extends FileSplit {
     }
 
     @Override
+    public long getStart() {
+        return super.getStart();
+    }
+
+    @Override
     public long getLength() {
         return super.getLength();
     }

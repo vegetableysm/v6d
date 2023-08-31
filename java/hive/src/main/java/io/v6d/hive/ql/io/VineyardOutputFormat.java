@@ -90,6 +90,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         Arrow.instantiate();
     }
 
+    // FIXME: read from configuration
     public static final int RECORD_BATCH_SIZE = 256000;
 
     private JobConf jc;
@@ -194,7 +195,7 @@ class SinkRecordWriter implements FileSinkOperator.RecordWriter {
         client.persist(meta.getId());
         Context.println("Table persisted, name:" + finalOutPath);
 
-        output.write((meta.getId().value() + "\n").getBytes(StandardCharsets.UTF_8));
+        output.write((meta.getId().toString() + "\n").getBytes(StandardCharsets.UTF_8));
         output.close();
     }
 

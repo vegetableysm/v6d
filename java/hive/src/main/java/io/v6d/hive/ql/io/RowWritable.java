@@ -1,35 +1,77 @@
+/** Copyright 2020-2023 Alibaba Group Holding Limited.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package io.v6d.hive.ql.io;
 
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.IOException;
+import java.util.function.BiConsumer;
 
-import org.apache.arrow.vector.VectorSchemaRoot;
+import io.v6d.modules.basic.columnar.ColumnarData;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.hadoop.io.*;
 
+import io.v6d.modules.basic.arrow.Arrow;
+
+import lombok.val;
+
 public class RowWritable implements Writable {
-    private Schema schema;
-    private Object[] colValues;
-    // private final boolean[] nullIndicators;
-    private int columnCount = 0;
+    private Writable[] colValues;
+    private boolean[] nullIndicators;
+    private BiConsumer<Writable, Object>[] setters;
 
-    public void constructRow(Schema schema, VectorSchemaRoot root, int index) {
-        this.schema = schema;
+    public RowWritable(Schema schema) {
         this.colValues = new Writable[schema.getFields().size()];
-        // this.nullIndicators = new boolean[schema.getFields().size()];
-        this.columnCount = schema.getFields().size();
-        for (int i = 0; i < columnCount; i++) {
-            colValues[i] = makeWritable((root.getFieldVectors().get(i).getObject(index)));
+        this.nullIndicators = new boolean[schema.getFields().size()];
+        this.setters = new BiConsumer[schema.getFields().size()];
+        for (int i = 0; i < schema.getFields().size(); i++) {
+            val dtype = schema.getFields().get(i).getFieldType().getType();
+            if (Arrow.Type.Boolean.equals(dtype)) {
+                this.colValues[i] = new BooleanWritable();
+                this.setters[i] = RowWritable::setBool;
+            } else if (Arrow.Type.Int.equals(dtype) || Arrow.Type.UInt.equals(dtype)) {
+                this.colValues[i] = new IntWritable();
+                this.setters[i] = RowWritable::setInt;
+            } else if (Arrow.Type.Int64.equals(dtype) || Arrow.Type.UInt64.equals(dtype)) {
+                this.colValues[i] = new LongWritable();
+                this.setters[i] = RowWritable::setLong;
+            } else if (Arrow.Type.Float.equals(dtype)) {
+                this.colValues[i] = new FloatWritable();
+                this.setters[i] = RowWritable::setFloat;
+            } else if (Arrow.Type.Double.equals(dtype)) {
+                this.colValues[i] = new DoubleWritable();
+                this.setters[i] = RowWritable::setDouble;
+            } else if (Arrow.Type.VarChar.equals(dtype)
+                    || Arrow.Type.ShortVarChar.equals(dtype)
+                    || Arrow.Type.VarBinary.equals(dtype)
+                    || Arrow.Type.ShortVarBinary.equals(dtype)) {
+                this.colValues[i] = new Text();
+                this.setters[i] = RowWritable::setString;
+            } else {
+                throw new UnsupportedOperationException("Unsupported type: " + dtype);
+            }
         }
-    }
-
-    public RowWritable() {
-
     }
 
     public Object[] getValues() {
         return colValues;
+    }
+
+    public void setValues(ColumnarData[] columns, int index) {
+        for (int i = 0; i < columns.length; i++) {
+            setters[i].accept(colValues[i], columns[i].getObject(index));
+        }
     }
 
     @Override
@@ -43,60 +85,31 @@ public class RowWritable implements Writable {
     }
 
     private BooleanWritable makeWritable(boolean value) {
-        // System.out.println("makeWritable(boolean value) called");
         return new BooleanWritable(value);
     }
 
-    private IntWritable makeWritable(int value) {
-        // System.out.println("makeWritable(int value) called");
-        return new IntWritable(value);
+    private static void setBool(Writable w, Object value) {
+        ((BooleanWritable) w).set((boolean) value);
     }
 
-    private LongWritable makeWritable(long value) {
-        // System.out.println("makeWritable(long value) called");
-        return new LongWritable(value);
+    private static void setInt(Writable w, Object value) {
+        ((IntWritable) w).set((int) value);
     }
 
-    private FloatWritable makeWritable(float value) {
-        // System.out.println("makeWritable(float value) called");
-        return new FloatWritable(value);
+    private static void setLong(Writable w, Object value) {
+        ((LongWritable) w).set((long) value);
     }
 
-    private DoubleWritable makeWritable(double value) {
-        // System.out.println("makeWritable(double value) called");
-        return new DoubleWritable(value);
+    private static void setFloat(Writable w, Object value) {
+        ((FloatWritable) w).set((float) value);
     }
 
-    private Text makeWritable(String value) {
-        // System.out.println("makeWritable(String value) called");
-        return new Text(value);
+    private static void setDouble(Writable w, Object value) {
+        ((DoubleWritable) w).set((double) value);
     }
 
-    private Object makeWritable(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Boolean) {
-            return makeWritable((boolean) value);
-        }
-        if (value instanceof Integer) {
-            return makeWritable((int) value);
-        }
-        if (value instanceof Long) {
-            return makeWritable((long) value);
-        }
-        if (value instanceof Float) {
-            return makeWritable((float) value);
-        }
-        if (value instanceof Double) {
-            return makeWritable((double) value);
-        }
-        if (value instanceof String) {
-            return makeWritable((String) value);
-        }
-        if (value instanceof org.apache.arrow.vector.util.Text) {
-            return new Text(((org.apache.arrow.vector.util.Text) value).toString());
-        }
-        return value;
+    private static void setString(Writable w, Object value) {
+        ((Text) w).set((String) value);
     }
 }
+

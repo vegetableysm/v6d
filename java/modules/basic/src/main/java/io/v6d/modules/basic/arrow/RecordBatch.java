@@ -21,6 +21,8 @@ import io.v6d.core.client.ds.ObjectMeta;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import io.v6d.modules.basic.columnar.ColumnarData;
 import lombok.val;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -54,6 +56,18 @@ public class RecordBatch extends Object {
 
     public VectorSchemaRoot getBatch() {
         return batch;
+    }
+
+    public long getRowCount() {
+        return batch.getRowCount();
+    }
+
+    public long getColumnCount() {
+        return batch.getFieldVectors().size();
+    }
+
+    public ColumnarData[] columar() {
+        return batch.getFieldVectors().stream().map(ColumnarData::new).toArray(ColumnarData[]::new);
     }
 
     @Override

@@ -141,9 +141,9 @@ public class RecordBatchBuilder implements ObjectBuilder {
             return new FloatArrayBuilder(client, rows);
         } else if (field.getType().equals(Arrow.Type.Double)) {
             return new DoubleArrayBuilder(client, rows);
-        } else if (field.getType().equals(Arrow.Type.LargeVarChar)) {
-            return new LargeStringArrayBuilder(client, rows);
         } else if (field.getType().equals(Arrow.Type.VarChar)) {
+            return new LargeStringArrayBuilder(client, rows);
+        } else if (field.getType().equals(Arrow.Type.ShortVarChar)) {
             return new StringArrayBuilder(client, rows);
         } else if (field.getType().equals(Arrow.Type.Null)) {
             return new NullArrayBuilder(client, rows);

@@ -19,7 +19,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.google.common.base.Stopwatch;
+import com.google.common.base.StopwatchContext;
 import io.v6d.core.client.Context;
+import io.v6d.core.common.util.VineyardException;
+import io.v6d.modules.basic.arrow.*;
+import io.v6d.modules.basic.columnar.ColumnarData;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -37,14 +42,10 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import lombok.val;
 
-import io.v6d.core.client.IPCClient;
 import io.v6d.core.client.ds.ObjectFactory;
 import io.v6d.core.common.util.ObjectID;
-import io.v6d.modules.basic.arrow.Arrow;
-import io.v6d.modules.basic.arrow.RecordBatchBuilder;
-import io.v6d.modules.basic.arrow.Table;
-import io.v6d.modules.basic.arrow.TableBuilder;
 
 public class VineyardInputFormat extends HiveInputFormat<NullWritable, RowWritable> implements VectorizedInputFormatInterface {
     @Override
@@ -61,25 +62,13 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, RowWritab
     public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
         Context.println("getSplits");
         Context.println("Utilities.getPlanPath(conf) in get splits is " + Utilities.getPlanPath(job));
-        List<InputSplit> splits = new ArrayList<InputSplit>();
         Path paths[] = FileInputFormat.getInputPaths(job);
 
-        IPCClient client;
-        // Table table[][];
-        // List<Table> table[];
-        long splitSize[];
-        try {
-            client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
-        } catch (Exception e) {
-            Context.println("Connect vineyard failed.");
-            return splits.toArray(new VineyardSplit[splits.size()]);
-        }
+        val client = Context.getClient();
+        val splits = new VineyardSplit[paths.length];
         Arrow.instantiate();
 
-        // table = new ArrayList[paths.length];
-        splitSize = new long[paths.length];
         for (int i = 0; i < paths.length; i++) {
-
             // Construct table name.
             Path path = paths[i];
             String tableName = path.toString();
@@ -88,13 +77,12 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, RowWritab
             // get object id from vineyard filesystem
             FileSystem fs = path.getFileSystem(job);
             FileStatus[] status = fs.listStatus(path);
-            if (status.length < 1) {
-                throw new IOException("Table file not found.");
+            if (status.length == 0) {
+                throw new VineyardException.ObjectNotExists("Table not found: " + tableName);
             }
 
             // Maybe there exists more than one table file.
-            // table[i] = new Table[status.length];
-            splitSize[i] = 0;
+            long numBatches = 0;
             for (int j = 0; j < status.length; j++) {
                 Path tableFilePath = status[j].getPath();
                 FSDataInputStream in = fs.open(tableFilePath);
@@ -104,122 +92,53 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, RowWritab
                 if (len == -1) {
                     continue;
                 }
-                String []objectIDStrs = new String(buffer, StandardCharsets.UTF_8).split("\n");
-                for (int k = 0; k < objectIDStrs.length; k++) {
-                    Context.println("ObjectID:" + objectIDStrs[k]);
-                    try {
-                        ObjectID tableID = new ObjectID(Long.parseLong(objectIDStrs[k].replaceAll("[^0-9]", "")));
-                        System.out.println("tableID:" + tableID.value());
-                        // Get table from vineyard.
-                        try {
-                            Table table = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(tableID));
-                            splitSize[i] += table.getBatches().size();
-                        } catch (Exception e) {
-                            throw new IOException("Get table failed.");
-                        }
-                    } catch (Exception e) {
-                        continue;
-                    }
+                String []objectIDs = new String(buffer, StandardCharsets.UTF_8).split("\n");
+                for (val objectID: objectIDs) {
+                    ObjectID tableID = ObjectID.fromString(objectID);
+                    Table table = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(tableID));
+                    numBatches += table.getBatches().size();
                 }
             }
+            // TODO: would generating a split for each record batch be better?
+            splits[i] = new VineyardSplit(path, 0, numBatches, job);
         }
-
-        // Split table.
-        int realNumSplits = paths.length;
-        for (int i = 0; i < realNumSplits; i++) {
-            VineyardSplit vineyardSplit = new VineyardSplit(paths[i], 0, splitSize[i], job);
-            splits.add(vineyardSplit);
-        }
-        
-
-        // int batchSize, realNumSplits;
-        // int totalRecordBatchCount = 0;
-        // int partitionsSplitCount[] = new int[table.length];
-
-        // Context.println("numSplits:" + numSplits + " table length:" + table.length);
-        // if (numSplits <= table.length) {
-        //     realNumSplits = table.length;
-        //     for (int i = 0; i < table.length; i++) {
-        //         partitionsSplitCount[i] = 1;
-        //     }
-        // } else {
-        //     realNumSplits = 0;
-        //     for (int i = 0; i < table.length; i++) {
-        //         totalRecordBatchCount += table[i].getBatches().size();
-        //     }
-        //     batchSize = totalRecordBatchCount / numSplits == 0 ? 1 : totalRecordBatchCount / numSplits;
-        //     for (int i = 0; i < table.length; i++) {
-        //         partitionsSplitCount[i] = (table[i].getBatches().size() + batchSize - 1) / batchSize;
-        //         realNumSplits += partitionsSplitCount[i];
-        //     }
-        // }
-
-        // for (int i = 0; i < partitionsSplitCount.length; i++) {
-        //     int partitionSplitCount = partitionsSplitCount[i];
-        //     int partitionBatchSize = table[i].getBatches().size() / partitionSplitCount;
-        //     Context.println("partitionBatchSize:" + partitionBatchSize);
-        //     for (int j = 0; j < partitionSplitCount; j++) {
-        //         VineyardSplit vineyardSplit = new VineyardSplit(paths[i], 0, table[i].getBatch(j).getBatch().getRowCount(), job);
-        //         Context.println("split path:" + paths[i].toString());
-        //         if (j == partitionSplitCount - 1) {
-        //             vineyardSplit.setBatch(j * partitionBatchSize, table[i].getBatches().size() - j * partitionBatchSize);
-        //         } else {
-        //             vineyardSplit.setBatch(j * partitionBatchSize, partitionBatchSize);
-        //         }
-        //         splits.add(vineyardSplit);
-        //     }
-        // }
-
-        // Context.println("num split:" + numSplits + " real num split:" + realNumSplits);
-        // Context.println("table length:" + table.length);
-        // for (int i = 0; i < table.length; i++) {
-        //     Context.println("table[" + i + "] batch size:" + table[i].getBatches().size());
-        //     Context.println("table[" + i + "] split count:" + partitionsSplitCount[i]);
-        // }
-        // client.disconnect();
-        // Context.println("Splits size:" + splits.size());
-        // for (int i = 0; i < splits.size(); i++) {
-        //     Context.println("Split[" + i + "] length:" + splits.get(i).getLength());
-        // }
-        // Context.println("Utilities.getPlanPath(conf) in get splits is " + Utilities.getPlanPath(job));
-
-        return splits.toArray(new VineyardSplit[splits.size()]);
+        return splits;
     }
 }
 
 class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
     private static Logger logger = LoggerFactory.getLogger(VineyardRecordReader.class);
 
-    // vineyard field
-    private static IPCClient client;
-    // private String tableName;
-    private List<ObjectID> tableObjectID = new ArrayList<ObjectID>();
-    private Table table;
-    // private int recordBatchIndex = 0;
+    private RecordBatch[] batches;
+    private int recordBatchIndex = -1;
     private int recordBatchInnerIndex = 0;
-    private VectorSchemaRoot vectorSchemaRoot;
-
-    // private int batchStartIndex;
-    // private int batchSize;
-    private int tableIndex = 0;
-    private int recordBatchIndex = 0;
+    private long recordTotal = 0;
+    private long recordConsumed = 0;
+    private Schema schema;
+    private VectorSchemaRoot batch;
+    private ColumnarData[] columns;
+    private Stopwatch watch = StopwatchContext.createUnstarted();
 
     VineyardRecordReader(JobConf job, VineyardSplit split) throws IOException {
         Context.println("VineyardBatchRecordReader");
-
         Path path = split.getPath();
-        Context.println("Get path from splits:" + path.toString());
+        String tableName = path.toString();
+        Context.println("Path for current split: " + path);
 
         FileSystem fs = path.getFileSystem(job);
         FileStatus[] status = fs.listStatus(path);
-        if (status.length < 1) {
-            throw new IOException("Table file not found or files are not merged.");
+        if (status.length == 0) {
+            throw new VineyardException.ObjectNotExists("Table not found: " + tableName);
         }
 
-        // There may be more than one table file.
-        // tableObjectID = new ObjectID[status.length];
-        for (int i = 0; i < status.length; i++) {
-            Path tableFilePath = status[i].getPath();
+        val client = Context.getClient();
+        Arrow.instantiate();
+
+        this.batches = new RecordBatch[(int) split.getLength()];
+        this.recordBatchIndex = 0;
+
+        for (int j = 0; j < status.length; j++) {
+            Path tableFilePath = status[j].getPath();
             FSDataInputStream in = fs.open(tableFilePath);
             FileStatus fileStatus = fs.getFileStatus(tableFilePath);
             byte[] buffer = new byte[(int)fileStatus.getLen()];
@@ -227,44 +146,21 @@ class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
             if (len == -1) {
                 continue;
             }
-            String []objectIDStrs = new String(buffer, StandardCharsets.UTF_8).split("\n");
-            for (int j = 0; j < objectIDStrs.length; j++) {
-                Context.println("ObjectID:" + objectIDStrs[j]);
-                try {
-                    ObjectID tableID = new ObjectID(Long.parseLong(objectIDStrs[j].replaceAll("[^0-9]", "")));
-                    Context.println("tableID:" + tableID.value());
-                    tableObjectID.add(tableID);
-                } catch (Exception e) {
-                    continue;
+            String []objectIDs = new String(buffer, StandardCharsets.UTF_8).split("\n");
+            for (val objectID: objectIDs) {
+                ObjectID tableID = ObjectID.fromString(objectID);
+                Table table = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(tableID));
+                for (val batch: table.getBatches()) {
+                    recordTotal += batch.getRowCount();
+                    this.batches[this.recordBatchIndex++] = batch;
+                    schema = table.getSchema().getSchema();
                 }
-            // tableObjectID[i] = new ObjectID(Long.parseLong(objectIDStr.replaceAll("[^0-9]", "")));
             }
         }
+        // reset to the beginning
+        this.recordBatchIndex = -1;
+        this.recordBatchInnerIndex = 0;
 
-        // batchStartIndex = split.getBatchStartIndex();
-        // batchSize = split.getBatchSize();
-        // recordBatchIndex = batchStartIndex;
-
-        // connect to vineyard
-        if (client == null) {
-            // TBD: get vineyard socket path from table properties
-            try {
-                client = new IPCClient(System.getenv("VINEYARD_IPC_SOCKET"));
-            } catch (Exception e) {
-                Context.println("connect to vineyard failed!");
-                Context.println(e.getMessage());
-            }
-        }
-        if (client == null || !client.connected()) {
-            Context.println("connected to vineyard failed!");
-            return;
-        } else {
-            Context.println("connected to vineyard succeed!");
-            Context.println("Hello, vineyard!");
-        }
-
-        Arrow.instantiate();
-        // HiveConf.setVar(job, HiveConf.ConfVars.PLAN, "vineyard:///");
         Context.println("Utilities.getPlanPath(conf) is " + Utilities.getPlanPath(job));
         Context.println("Map work:" + Utilities.getMapWork(job));
     }
@@ -272,10 +168,6 @@ class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
     @Override
     public void close() throws IOException {
         System.out.printf("closing\n");
-        if(client.connected()) {
-            client.disconnect();
-            Context.println("Bye, vineyard!");
-        }
     }
 
     @Override
@@ -287,76 +179,44 @@ class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
     @Override
     public RowWritable createValue() {
         System.out.printf("creating value\n");
-        return new RowWritable();
+        return new RowWritable(schema);
     }
 
     @Override
     public long getPos() throws IOException {
-        // System.out.printf("get pos\n");
-        return 0;
+        return recordConsumed;
     }
 
     @Override
     public float getProgress() throws IOException {
         System.out.printf("get progress\n");
-        return 0;
+        return ((float) recordConsumed) / recordTotal;
     }
 
     @Override
     public boolean next(NullWritable key, RowWritable value) throws IOException {
-        // System.out.printf("next\n");
-        Context.println("next");
-        if (tableIndex > tableObjectID.size()) {
-            Context.println("return false 1");
-            return false;
-        }
-
-        if (table == null) {
-            try {
-                // Context.println("Get objdect id:" + tableName);
-                // ObjectID objectID = client.getName(tableName, false);
-                while (tableIndex < tableObjectID.size() && tableObjectID.get(tableIndex) == null) {
-                    tableIndex++;
-                }
-                if (tableIndex >= tableObjectID.size()) {
-                    Context.println("return false 2");
-                    return false;
-                }
-
-                ObjectID objectID = tableObjectID.get(tableIndex++);
-                Context.println("Table Id:" + objectID.value());
-                table = (Table) ObjectFactory.getFactory().resolve(client.getMetaData(objectID));
-            } catch (Exception e) {
-                Context.println("Get objectID failed.");
+        watch.start();
+        // initialize the current batch
+        while (batch == null || recordBatchInnerIndex >= batch.getRowCount()) {
+            if (recordBatchIndex + 1 >= batches.length) {
                 return false;
             }
-        }
-        Context.println("table length:" + table.getBatches().size());
-        // Context.println("recordBatchIndex:" + recordBatchIndex + " batchSize:" + batchSize + " batchStartIndex:" + batchStartIndex);
-        // if (recordBatchIndex >= batchSize + batchStartIndex) {
-        //     Context.println("return false 1");
-        //     return false;
-        // }
-        if (vectorSchemaRoot == null) {
-            vectorSchemaRoot = table.getArrowBatch(recordBatchIndex);
-        }
-
-        Schema schema;
-        schema = vectorSchemaRoot.getSchema();
-        // Context.println("recordBatchInnerIndex:" + recordBatchInnerIndex + " vectorSchemaRoot.getRowCount():" + vectorSchemaRoot.getRowCount());
-        value.constructRow(schema, vectorSchemaRoot, recordBatchInnerIndex);
-        recordBatchInnerIndex += 1;
-        if (recordBatchInnerIndex >= vectorSchemaRoot.getRowCount()) {
-            recordBatchInnerIndex = 0;
             recordBatchIndex++;
-            vectorSchemaRoot = null;
+            if (recordBatchIndex >= batches.length) {
+                return false;
+            }
+            batch = batches[recordBatchIndex].getBatch();
+            columns = batches[recordBatchIndex].columar();
+            recordBatchInnerIndex = 0;
+            Context.println("record batch length: " + batch.getRowCount() + " time usage util now: " + watch);
         }
 
-        if (recordBatchIndex >= table.getBatches().size()) {
-            recordBatchIndex = 0;
-            table = null;
-        }
-        // Context.println("return true");
+        // update the value
+        value.setValues(columns, recordBatchInnerIndex);
+
+        // move cursor to next record
+        recordBatchInnerIndex++;
+        watch.stop();
         return true;
     }
 }
