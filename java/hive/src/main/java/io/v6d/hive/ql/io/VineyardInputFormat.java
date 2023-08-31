@@ -112,12 +112,13 @@ class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
     private RecordBatch[] batches;
     private int recordBatchIndex = -1;
     private int recordBatchInnerIndex = 0;
-    private long recordTotal = 0;
-    private long recordConsumed = 0;
     private Schema schema;
     private VectorSchemaRoot batch;
     private ColumnarData[] columns;
     private Stopwatch watch = StopwatchContext.createUnstarted();
+
+    private long recordTotal = 0;
+    private long recordConsumed = 0;
 
     VineyardRecordReader(JobConf job, VineyardSplit split) throws IOException {
         Context.println("VineyardBatchRecordReader");
@@ -182,6 +183,9 @@ class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
         return new RowWritable(schema);
     }
 
+    /**
+     * N.B.: this method must be accurate and is important for selection performance.
+     */
     @Override
     public long getPos() throws IOException {
         return recordConsumed;
@@ -216,6 +220,7 @@ class VineyardRecordReader implements RecordReader<NullWritable, RowWritable> {
 
         // move cursor to next record
         recordBatchInnerIndex++;
+        recordConsumed++;
         watch.stop();
         return true;
     }

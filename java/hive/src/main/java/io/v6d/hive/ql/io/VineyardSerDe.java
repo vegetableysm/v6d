@@ -41,8 +41,7 @@ public class VineyardSerDe extends AbstractSerDe {
     private StructObjectInspector objectInspector;
     private ObjectInspector[] objectInspectors;
 
-    private ObjectInspector lazyObjectInspector;
-    private LazyStruct cachedLazyStruct;
+    private RowWritable.VineyardStructInspector inspector;
 
     private RecordWrapperWritable writable = new RecordWrapperWritable();
 
@@ -62,12 +61,7 @@ public class VineyardSerDe extends AbstractSerDe {
         this.objectInspector = (StructObjectInspector) TypeInfoUtils.getStandardWritableObjectInspectorFromTypeInfo (this.rowTypeInfo);
         this.objectInspectors = this.objectInspector.getAllStructFieldRefs().stream().map(f -> f.getFieldObjectInspector()).toArray(ObjectInspector[]::new);
 
-        // val lazyParameters = new LazySerDeParameters(configuration, tableProperties, getClass().getName());
-        // lazyObjectInspector = LazyFactory.createLazyStructInspector(
-        //         lazyParameters.getColumnNames(),
-        //         lazyParameters.getColumnTypes(),
-        //         new LazyObjectInspectorParametersImpl(lazyParameters));
-        // cachedLazyStruct = (LazyStruct) LazyFactory.createLazyObject(lazyObjectInspector);
+        this.inspector = new RowWritable.VineyardStructInspector(this.rowTypeInfo);
     }
 
     @Override
@@ -94,15 +88,7 @@ public class VineyardSerDe extends AbstractSerDe {
 
     @Override
     public Object deserialize(Writable writable) {
-        deserializeWatch.start();
-        // System.out.println("deserialize called");
-        val values = ((RowWritable) writable).getValues();
-        deserializeWatch.stop();
-        elements++;
-        if (elements % 1000000 ==0 ){
-            Context.printf("deserialize %d elements use %s\n", elements, deserializeWatch.toString());
-        }
-        return values;
+        return writable;
     }
 
     @Override
@@ -112,6 +98,6 @@ public class VineyardSerDe extends AbstractSerDe {
 
     @Override
     public ObjectInspector getObjectInspector() {
-        return this.objectInspector;
+        return this.inspector;
     }
 }
