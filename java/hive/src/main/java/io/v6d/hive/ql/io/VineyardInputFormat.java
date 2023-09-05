@@ -91,12 +91,15 @@ public class VineyardInputFormat extends HiveInputFormat<NullWritable, RowWritab
                     try {
                         ObjectID tableID = ObjectID.fromString(objectID);
                         Table table =
-                                (Table) ObjectFactory.getFactory().resolve(client.getMetaData(tableID));
+                                (Table)
+                                        ObjectFactory.getFactory()
+                                                .resolve(client.getMetaData(tableID));
                         numBatches += table.getBatches().size();
                     } catch (Exception e) {
                         // Skip some invalid file.
                         Context.println("Skip invalid file:" + tableFilePath);
-                        Context.println("File content:" + new String(buffer, StandardCharsets.UTF_8));
+                        Context.println(
+                                "File content:" + new String(buffer, StandardCharsets.UTF_8));
                         break;
                     }
                 }

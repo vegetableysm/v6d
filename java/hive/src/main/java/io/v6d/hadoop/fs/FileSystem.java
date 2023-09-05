@@ -415,44 +415,52 @@ public class FileSystem extends org.apache.hadoop.fs.FileSystem {
 
     @Override
     public void moveFromLocalFile(Path src, Path dst) throws IOException {
-        throw new UnsupportedOperationException("Vineyard file system not support moveFromLocalFile.");
+        throw new UnsupportedOperationException(
+                "Vineyard file system not support moveFromLocalFile.");
     }
 
     @Override
     public void copyFromLocalFile(boolean delSrc, Path src, Path dst) throws IOException {
-        throw new UnsupportedOperationException("Vineyard file system not support copyFromLocalFile.");
+        throw new UnsupportedOperationException(
+                "Vineyard file system not support copyFromLocalFile.");
     }
 
     @Override
     public void copyFromLocalFile(boolean delSrc, boolean overwrite, Path[] srcs, Path dst)
             throws IOException {
-        throw new UnsupportedOperationException("Vineyard file system not support copyFromLocalFile.");
+        throw new UnsupportedOperationException(
+                "Vineyard file system not support copyFromLocalFile.");
     }
 
     @Override
     public void copyFromLocalFile(boolean delSrc, boolean overwrite, Path src, Path dst)
             throws IOException {
-        throw new UnsupportedOperationException("Vineyard file system not support copyFromLocalFile.");
+        throw new UnsupportedOperationException(
+                "Vineyard file system not support copyFromLocalFile.");
     }
 
     @Override
     public void copyToLocalFile(Path src, Path dst) throws IOException {
-        throw new UnsupportedOperationException("Vineyard file system not support copyToLocalFile.");
+        throw new UnsupportedOperationException(
+                "Vineyard file system not support copyToLocalFile.");
     }
 
     @Override
     public void moveToLocalFile(Path src, Path dst) throws IOException {
-        throw new UnsupportedOperationException("Vineyard file system not support moveToLocalFile.");
+        throw new UnsupportedOperationException(
+                "Vineyard file system not support moveToLocalFile.");
     }
 
     @Override
     public void copyToLocalFile(boolean delSrc, Path src, Path dst) throws IOException {
-        throw new UnsupportedOperationException("Vineyard file system not support copyToLocalFile.");
+        throw new UnsupportedOperationException(
+                "Vineyard file system not support copyToLocalFile.");
     }
 
     @Override
     public void copyToLocalFile(boolean delSrc, Path src, Path dst, boolean useRawLocalFileSystem)
             throws IOException {
-        throw new UnsupportedOperationException("Vineyard file system not support copyToLocalFile.");
+        throw new UnsupportedOperationException(
+                "Vineyard file system not support copyToLocalFile.");
     }
 }
