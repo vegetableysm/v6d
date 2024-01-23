@@ -144,9 +144,7 @@ KV_STATE_WITH_LAYER query(const std::vector<int>& token_list, int token) {
   }
 
   result = queryInternal(token_list, token);
-  LOG(INFO) << "unlock";
   pthread_mutex_unlock(&sync_mutex);
-  LOG(INFO) << "query end";
 
   return result;
 }
@@ -263,12 +261,4 @@ void threadFunc() {
       2. merge the object with local cache (e.g. create a new child_cache_object
   and merge)
       3. goto d
-*/
-/*    node with attr      node         cache node     data node
- addr: 0x7e6fec007be0 0x7e6fec0077e0 0x7e6fec001100 0
- addr: 0x7e6fec007be0 0x7e6fec0077e0 0x7e6fec001100 0x7e6fec009ea0
-
-
-
- 0x5654cf368c60 0x5654cf368f40 0x7e6fec001100 0x7e6fec009ea0
 */

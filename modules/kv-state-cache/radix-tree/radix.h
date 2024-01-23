@@ -104,6 +104,7 @@ typedef struct raxNode {
     uint32_t issubtree:1; /* Node is the root node of a sub tree */
     uint32_t size:28;     /* Number of children, or compressed string len. */
     uint32_t numnodes; /* Number of the child nodes */
+    int64_t timestamp = 0;
     /* Data layout is as follows:
      *
      * If node is not compressed we have 'size' bytes, one for each children
@@ -223,5 +224,5 @@ void raxSerialize(rax *root, std::vector<std::vector<int>> &tokenList, std::vect
  * in a low level way, so this function is exported as well. */
 void raxSetData(raxNode *n, void *data);
 void *raxGetData(raxNode *n);
-
+void raxFindLastRecentNode(raxNode *node, std::vector<int>& key);
 #endif

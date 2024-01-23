@@ -36,6 +36,8 @@
 #include <stdio.h>
 #include <errno.h>
 #include <math.h>
+#include <chrono>
+
 #include "radix.h"
 
 #ifndef RAX_MALLOC_INCLUDE
@@ -43,6 +45,8 @@
 #endif
 
 #include RAX_MALLOC_INCLUDE
+
+static uint64_t global_timestamp = 1;
 
 /* This is a special pointer that is guaranteed to never have the same value
  * of a radix tree node. It's used in order to report "not found" error without
@@ -475,6 +479,11 @@ static inline size_t raxLowWalk(rax *rax, const int *s, size_t len, raxNode **st
 
     size_t i = 0; /* Position in the string. */
     size_t j = 0; /* Position in the node children (or bytes if compressed).*/
+
+    std::chrono::milliseconds ms = std::chrono::duration_cast< std::chrono::milliseconds >(
+        std::chrono::system_clock::now().time_since_epoch());
+    int64_t timestamp = ms.count();
+
     while(h->size && i < len) {
         debugnode("Lookup current node",h);
         int *v = h->data;
@@ -503,6 +512,9 @@ static inline size_t raxLowWalk(rax *rax, const int *s, size_t len, raxNode **st
             i++;
         }
 
+        /* Save timestamp. */
+        h->timestamp = timestamp;
+
         if (ts) raxStackPush(ts,h); /* Save stack of parent nodes. */
         raxNode **children = raxNodeFirstChildPtr(h);
         if (h->iscompr) j = 0; /* Compressed node only child is at index 0. */
@@ -513,6 +525,7 @@ static inline size_t raxLowWalk(rax *rax, const int *s, size_t len, raxNode **st
                   position to 0 to signal this node represents
                   the searched key. */
     }
+    h->timestamp = timestamp;
     debugnode("Lookup stop node is",h);
     if (stopnode) *stopnode = h;
     if (plink) *plink = parentlink;
@@ -1991,6 +2004,8 @@ void raxRecursiveShow(int level, int lpad, raxNode *n) {
         numchars += printf("=%p",raxGetData(n));
     }
 
+    numchars += printf(" timestamp:%ld ", n->timestamp);
+
     int numchildren = n->iscompr ? 1 : n->size;
     /* Note that 7 and 4 magic constants are the string length
      * of " `-(x) " and " -> " respectively. */
@@ -2178,4 +2193,40 @@ void raxSerialize(rax *root, std::vector<std::vector<int>> &tokenList, std::vect
         dataList.push_back(iter.data);
     }
     raxStop(&iter);
+}
+
+void raxFindLastRecentNode(raxNode *node, std::vector<int>& key) {
+    raxNode** childList = raxNodeFirstChildPtr(node);
+
+    // node must have a key.
+    // assert(node->iskey == 1);
+    int numChildren = node->iscompr ? 1 : node->size;
+    if (numChildren == 0) {
+        // has no children, return
+        return;
+    }
+
+    raxNode *chossenChild = childList[0];
+    int choosenChildIndex = 0;
+    for (int i = 1; i < numChildren; i++) {
+        if (childList[i]->timestamp != 0 && childList[i]->timestamp <= chossenChild->timestamp) {
+            chossenChild = childList[i];
+            choosenChildIndex = i;
+        }
+    }
+
+    if (node->iscompr) {
+        for (int i = 0; i < node->size; i++) {
+            key.push_back(node->data[i]);
+        }
+    } else {
+        key.push_back(node->data[choosenChildIndex]);
+    }
+
+    if (chossenChild->timestamp == 0) {
+        // means data ptr
+        return;
+    }
+
+    raxFindLastRecentNode(chossenChild, key);
 }
