@@ -29,7 +29,7 @@ void PrintTokenList(std::vector<int>& vector) {
 void LRUStrategy::PrintLRUList() {
   LOG(INFO) << "List:";
   std::shared_ptr<LRUCacheNode> node = header;
-  while(node != nullptr) {
+  while (node != nullptr) {
     PrintTokenList(node->tokens);
     LOG(INFO) << "->";
     node = node->next;
@@ -50,7 +50,7 @@ LRUStrategy::LRUStrategy(const std::vector<std::vector<int>>& cache_list,
 std::shared_ptr<LRUCacheNode> LRUStrategy::InsertToHeader(
     const std::vector<int>& tokens, std::vector<int>& evicted_tokens) {
   if (current_size == capacity) {
-    std::shared_ptr<LRUCacheNode> remove_node = tail;//Remove();
+    std::shared_ptr<LRUCacheNode> remove_node = tail;  // Remove();
     evicted_tokens = remove_node->tokens;
   }
 
