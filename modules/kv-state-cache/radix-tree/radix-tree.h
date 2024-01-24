@@ -155,7 +155,7 @@ class RadixTree : public std::enable_shared_from_this<RadixTree> {
       std::vector<int> evicted_tokens;
       raxFindLastRecentNode(this->tree->head, evicted_tokens);
       std::string evicted_str = "";
-      for (int i = 0; i < evicted_tokens.size(); i++) {
+      for (size_t i = 0; i < evicted_tokens.size(); i++) {
         evicted_str += std::to_string(evicted_tokens[i]);
       }
       this->Delete(evicted_tokens, evicted_node);
@@ -252,7 +252,7 @@ class RadixTree : public std::enable_shared_from_this<RadixTree> {
       }
     }
     serialized_str = oss.str();
-    for (int i = 0; i < serialized_str.length(); i++) {
+    for (size_t i = 0; i < serialized_str.length(); i++) {
       LOG(INFO) << (int) serialized_str[i];
     }
 
@@ -311,7 +311,7 @@ class RadixTree : public std::enable_shared_from_this<RadixTree> {
     data_str = std::string(decompress_buffer, decompressed_size);
     delete[] decompress_buffer;
 
-    for (int i = 0; i < data_str.length(); i++) {
+    for (size_t i = 0; i < data_str.length(); i++) {
       LOG(INFO) << (int) data_str[i];
     }
 
@@ -348,12 +348,12 @@ class RadixTree : public std::enable_shared_from_this<RadixTree> {
     // is created by upper layer. Here just recover it from serialized
     // string.
     std::shared_ptr<RadixTree> radix_tree = std::make_shared<RadixTree>(10);
-    for (int i = 0; i < token_list.size(); i++) {
-      for (int j = 0; j < token_list[i].size(); j++) {
+    for (size_t i = 0; i < token_list.size(); i++) {
+      for (size_t j = 0; j < token_list[i].size(); j++) {
         LOG(INFO) << token_list[i][j];
       }
     }
-    for (int i = 0; i < token_list.size(); i++) {
+    for (size_t i = 0; i < token_list.size(); i++) {
       std::shared_ptr<NodeWithTreeAttri> evicted_node;
       std::shared_ptr<NodeWithTreeAttri> node =
           radix_tree->Insert(token_list[i], evicted_node);

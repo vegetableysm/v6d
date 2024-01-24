@@ -35,6 +35,8 @@
 #include <stddef.h>
 #include <memory>
 #include <vector>
+#include <map>
+#include <cmath>
 
 /* Representation of a radix tree as implemented in this file, that contains
  * the token lists [1, 2, 3], [1, 2, 3, 4, 5, 6] and [1, 2, 3, 6, 7, 8] after 
@@ -225,4 +227,6 @@ void raxSerialize(rax *root, std::vector<std::vector<int>> &tokenList, std::vect
 void raxSetData(raxNode *n, void *data);
 void *raxGetData(raxNode *n);
 void raxFindLastRecentNode(raxNode *node, std::vector<int>& key);
+void mergeTree(rax* first_tree, rax* second_tree, std::vector<std::vector<int>>& evicted_tokens, std::map<std::vector<int>, void*>& insert_tokens, int max_node);
+void testIteRax(rax *tree);
 #endif
