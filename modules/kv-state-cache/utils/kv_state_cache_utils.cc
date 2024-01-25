@@ -192,15 +192,11 @@ void sync() {
   }
 
   // 3. merge the cache object
-  std::shared_ptr<KVStateCacheBuilder> merged_kv_state_cache_builder =
-      kv_state_cache_builder->Merge(client, global_kv_state_cache);
-  if (merged_kv_state_cache_builder == nullptr) {
-    merged_kv_state_cache_builder = kv_state_cache_builder;
-  }
+  kv_state_cache_builder->Merge(client, global_kv_state_cache);
 
   // 4. push the cache object
   std::shared_ptr<Object> kv_state_cache =
-      merged_kv_state_cache_builder->_Seal(client);
+      kv_state_cache_builder->_Seal(client);
   client.Persist(kv_state_cache->id());
 
   // 5. put the name of the new cache object to the meta server

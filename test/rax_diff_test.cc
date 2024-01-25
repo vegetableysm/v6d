@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
   printf("==============================\n");
 
   std::vector<std::vector<int>> evicted_tokens;
-  std::map<std::vector<int>, void*> insert_tokens;
+  std::set<std::vector<int>> insert_tokens;
   mergeTree(rt_1, rt_2, evicted_tokens, insert_tokens, max_node);
 
   printf("evicted_tokens:\n");
@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
   }
 
   for (auto it = insert_tokens.begin(); it != insert_tokens.end(); it++) {
-    raxInsert(rt_1, const_cast<int*>(it->first.data()), it->first.size(), NULL,
+    raxInsert(rt_1, const_cast<int*>(it->data()), it->size(), NULL,
               NULL, false);
   }
 

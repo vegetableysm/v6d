@@ -2341,7 +2341,8 @@ void freeVector(std::vector<raxIterator> &ite_list) {
 
 void mergeTree(rax* first_tree, rax* second_tree,
                std::vector<std::vector<int>>& evicted_tokens,
-               std::map<std::vector<int>, void*>& insert_tokens, int max_node) {
+               std::set<std::vector<int>>& insert_tokens, int max_node) {
+    printf("merge tree!\n");
     raxIterator first_tree_iter;
     raxIterator second_tree_iter;
     rax* tmp = raxNew();
@@ -2470,8 +2471,7 @@ void mergeTree(rax* first_tree, rax* second_tree,
                     second_tree_iter_list[second_tree_index].key,
                     second_tree_iter_list[second_tree_index].key +
                     second_tree_iter_list[second_tree_index].key_len);
-                insert_tokens.insert(std::pair<std::vector<int>, void*>(
-                    insert_token, second_tree_iter_list[second_tree_index].data));
+                insert_tokens.insert(insert_token);
 
                 raxInsert(tmp, second_tree_iter_list[second_tree_index].key,
                     second_tree_iter_list[second_tree_index].key_len,
@@ -2519,8 +2519,7 @@ void mergeTree(rax* first_tree, rax* second_tree,
                         second_tree_iter_list[second_tree_index].key,
                         second_tree_iter_list[second_tree_index].key +
                             second_tree_iter_list[second_tree_index].key_len);
-                    insert_tokens.insert(std::pair<std::vector<int>, void*>(
-                        insert_token, second_tree_iter_list[second_tree_index].data));
+                    insert_tokens.insert(insert_token);
 
                     raxInsert(tmp, second_tree_iter_list[second_tree_index].key,
                             second_tree_iter_list[second_tree_index].key_len,
@@ -2585,8 +2584,7 @@ void mergeTree(rax* first_tree, rax* second_tree,
                     second_tree_iter_list[second_tree_index].key,
                     second_tree_iter_list[second_tree_index].key +
                         second_tree_iter_list[second_tree_index].key_len);
-                insert_tokens.insert(std::pair<std::vector<int>, void*>(
-                    insert_token, second_tree_iter_list[second_tree_index].data));
+                insert_tokens.insert(insert_token);
 
                 raxInsert(tmp, second_tree_iter_list[second_tree_index].key,
                         second_tree_iter_list[second_tree_index].key_len,

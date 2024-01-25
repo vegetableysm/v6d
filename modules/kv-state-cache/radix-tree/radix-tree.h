@@ -27,6 +27,7 @@ limitations under the License.
 #include <map>
 #include <memory>
 #include <vector>
+#include <set>
 
 using namespace vineyard;
 
@@ -93,6 +94,7 @@ class RadixTree : public std::enable_shared_from_this<RadixTree> {
   rax* tree;
   int cache_capacity;
   int node_count;
+  std::set<rax*> sub_tree_set;
 
  public:
   RadixTree(int cache_capacity) {
@@ -400,6 +402,12 @@ class RadixTree : public std::enable_shared_from_this<RadixTree> {
     this->custom_data = custom_data;
     this->custom_data_length = custom_data_length;
   }
+
+  std::set<rax*> GetSubTreeSet() { return sub_tree_set; }
+
+  rax* GetRootTree() { return tree; }
+
+  int GetCacheCapacity() { return cache_capacity; }
 };
 
 #endif
