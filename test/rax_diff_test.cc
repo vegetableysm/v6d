@@ -45,12 +45,15 @@ int main(int argc, char** argv) {
 
   insert(rt_1, key_3, 2);
   insert(rt_1, key_4, 3);
-  insert(rt_1, key_5, 3);
 
   sleep(1);
 
   insert(rt_2, key_1, 2);
   insert(rt_2, key_2, 2);
+
+  sleep(1);
+
+  insert(rt_1, key_5, 3);
 
   raxShow(rt_1);
   printf("==============================\n");
@@ -74,12 +77,12 @@ int main(int argc, char** argv) {
     printf("\n");
   }
   for (size_t i = 0; i < evicted_tokens.size(); i++) {
-    raxRemove(rt_1, evicted_tokens[i].data(), evicted_tokens[i].size(), NULL);
+    raxRemove(rt_1, evicted_tokens[i].data(), evicted_tokens[i].size(), NULL, false);
   }
 
   for (auto it = insert_tokens.begin(); it != insert_tokens.end(); it++) {
     raxInsert(rt_1, const_cast<int*>(it->first.data()), it->first.size(), NULL,
-              NULL);
+              NULL, false);
   }
 
   raxShow(rt_1);

@@ -37,6 +37,8 @@
 #include <vector>
 #include <map>
 #include <cmath>
+#include <algorithm>
+#include <queue>
 
 /* Representation of a radix tree as implemented in this file, that contains
  * the token lists [1, 2, 3], [1, 2, 3, 4, 5, 6] and [1, 2, 3, 6, 7, 8] after 
@@ -197,12 +199,12 @@ extern void *raxNotFound;
 
 /* Exported API. */
 rax *raxNew(void);
-int raxInsert(rax *rax, int *s, size_t len, void *data, void **old);
+int raxInsert(rax *rax, int *s, size_t len, void *data, void **old, bool set_timestamp = true);
 int raxTryInsert(rax *rax, int *s, size_t len, void *data, void **old);
 int raxInsertAndReturnDataNode(rax *rax, int *s, size_t len, void *data, void **node, void **old);
-int raxRemove(rax *rax, int *s, size_t len, void **old);
+int raxRemove(rax *rax, int *s, size_t len, void **old, bool set_timestamp = true);
 void *raxFind(rax *rax, int *s, size_t len);
-raxNode *raxFindAndReturnDataNode(rax *rax, int *s, size_t len);
+raxNode *raxFindAndReturnDataNode(rax *rax, int *s, size_t len, bool set_timestamp = true);
 void raxFree(rax *rax);
 void raxFreeWithCallback(rax *rax, void (*free_callback)(void*));
 void raxStart(raxIterator *it, rax *rt);
