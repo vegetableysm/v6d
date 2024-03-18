@@ -52,16 +52,10 @@ class LocalMetaService : public IMetaService {
 
   void TryAcquireLock(
       std::string key,
-      callback_t<bool, std::string> callback_after_try_lock) override {
-    server_ptr_->GetMetaContext().post(boost::bind(
-        callback_after_try_lock, Status::NotImplemented(), false, ""));
-  }
+      callback_t<bool, std::string> callback_after_try_lock) override;
 
   void TryReleaseLock(std::string key,
-                      callback_t<bool> callback_after_try_unlock) override {
-    server_ptr_->GetMetaContext().post(boost::bind(
-        callback_after_try_unlock, Status::NotImplemented(), false));
-  }
+                      callback_t<bool> callback_after_try_unlock) override;
 
  protected:
   explicit LocalMetaService(std::shared_ptr<VineyardServer>& server_ptr)

@@ -58,4 +58,17 @@ void LocalMetaService::startDaemonWatch(
     callback_t<const std::vector<op_t>&, unsigned, callback_t<unsigned>>
         callback) {}
 
+void LocalMetaService::TryAcquireLock(
+    std::string key,
+    callback_t<bool, std::string> callback_after_try_lock) {
+    server_ptr_->GetMetaContext().post(boost::bind(
+        callback_after_try_lock, Status::OK(), true, key));
+}
+
+void LocalMetaService::TryReleaseLock(std::string key,
+                    callback_t<bool> callback_after_try_unlock) {
+  server_ptr_->GetMetaContext().post(boost::bind(
+      callback_after_try_unlock, Status::OK(), true));
+}
+
 }  // namespace vineyard
