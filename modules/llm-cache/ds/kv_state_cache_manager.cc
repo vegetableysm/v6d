@@ -95,6 +95,15 @@ Status KVStateCacheManager::Update(
 }
 
 Status KVStateCacheManager::Update(
+    const std::vector<int>& tokenList,
+    const std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList, uint64_t& writeSize) {
+  if (kvStateList.size() != tokenList.size()) {
+    return Status::Invalid("Token list size not match kv state list size");
+  }
+  return storage->Update(tokenList, kvStateList, writeSize);
+}
+
+Status KVStateCacheManager::Update(
     const std::vector<int>& prefix, const std::vector<int>& tokenList,
     const std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList) {
   if (kvStateList.size() != tokenList.size()) {
@@ -119,6 +128,12 @@ Status KVStateCacheManager::Query(
     const std::vector<int>& tokenList,
     std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList) {
   return storage->Query(tokenList, kvStateList);
+}
+
+Status KVStateCacheManager::Query(
+    const std::vector<int>& tokenList,
+    std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList, uint64_t& readSize) {
+  return storage->Query(tokenList, kvStateList, readSize);
 }
 
 Status KVStateCacheManager::ClearGlobalCache(Client& client,

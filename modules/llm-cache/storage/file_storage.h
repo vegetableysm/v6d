@@ -84,6 +84,8 @@ class FileStorage : public IStorage {
 
   virtual Status Delete(std::string path) = 0;
 
+  virtual Status Flush(std::string path) = 0;
+
   virtual bool IsFileExist(const std::string& path) = 0;
 
   virtual std::string GetTmpFileDir(std::string filePath) = 0;
@@ -97,6 +99,10 @@ class FileStorage : public IStorage {
                 const std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>&
                     kvStateList) override;
 
+  Status Update(const std::vector<int>& tokenList,
+                const std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>&
+                    kvStateList, uint64_t& writeSize) override;
+
   Status Update(const std::vector<int>& tokenList, int nextToken,
                 const std::map<int, std::pair<LLMKV, LLMKV>>& kvState) override;
 
@@ -106,6 +112,10 @@ class FileStorage : public IStorage {
 
   Status Query(const std::vector<int>& tokenList,
                std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList)
+      override;
+
+  Status Query(const std::vector<int>& tokenList,
+               std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList, uint64_t& readSize)
       override;
 
   Status Query(const std::vector<int>& tokenList, int nextToken,

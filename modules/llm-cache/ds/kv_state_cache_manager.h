@@ -50,6 +50,10 @@ class KVStateCacheManager {
       const std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList);
 
   Status Update(
+      const std::vector<int>& tokenList,
+      const std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList, uint64_t& writeSize);
+
+  Status Update(
       const std::vector<int>& prefix, const std::vector<int>& tokenList,
       const std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList);
 
@@ -59,6 +63,10 @@ class KVStateCacheManager {
   Status Query(
       const std::vector<int>& tokenList,
       std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList);
+
+  Status Query(
+      const std::vector<int>& tokenList,
+      std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList, uint64_t& readSize);
 
   void Close();
 

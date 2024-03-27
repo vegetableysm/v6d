@@ -81,6 +81,8 @@ class LocalFileStorage : public FileStorage {
   Status Delete(std::string path) override;
 
   std::string GetTmpFileDir(std::string filePath) override;
+
+  Status Flush(std::string path) override;
 };
 
 }  // namespace vineyard

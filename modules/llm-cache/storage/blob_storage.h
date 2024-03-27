@@ -69,6 +69,10 @@ class BlobStorage : public IStorage {
 
   Status Update(const std::vector<int>& tokenList,
                 const std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>&
+                    kvStateList, uint64_t& writeSize) { return Status::OK(); };
+
+  Status Update(const std::vector<int>& tokenList,
+                const std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>&
                     kvStateList) override;
 
   Status Update(
@@ -81,6 +85,10 @@ class BlobStorage : public IStorage {
   Status Query(const std::vector<int>& tokenList,
                std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList)
       override;
+
+  Status Query(const std::vector<int>& tokenList,
+               std::vector<std::map<int, std::pair<LLMKV, LLMKV>>>& kvStateList,
+               uint64_t& readSize) { return Status::OK(); };
 
   void CloseCache() override;
 
