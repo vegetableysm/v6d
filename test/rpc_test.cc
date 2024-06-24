@@ -28,6 +28,22 @@ limitations under the License.
 
 using namespace vineyard;  // NOLINT(build/namespaces)
 
+void threadFunc(Client &client, ObjectID id) {
+  LOG(INFO) << "wait 2s...";
+  sleep(2);
+  VINEYARD_CHECK_OK(client.DelData(id));
+  LOG(INFO) << "Object has been del!";
+
+  LOG(INFO) << "Create new!";
+  std::vector<double> double_array = {11, 23, 34, 45, 56};
+
+  ArrayBuilder<double> builder(client, double_array);
+  auto sealed_double_array =
+      std::dynamic_pointer_cast<Array<double>>(builder.Seal(client));
+  VINEYARD_CHECK_OK(client.Persist(sealed_double_array->id()));
+  LOG(INFO) << "Create new done";
+}
+
 int main(int argc, char** argv) {
   if (argc < 3) {
     printf("usage ./rpc_test <ipc_socket> <rpc_endpoint>");
@@ -52,14 +68,22 @@ int main(int argc, char** argv) {
   VINEYARD_CHECK_OK(ipc_client.Persist(sealed_double_array->id()));
 
   ObjectID id = sealed_double_array->id();
+  std::thread t(threadFunc, std::ref(ipc_client), id);
 
-  auto vy_double_array =
-      std::dynamic_pointer_cast<Array<double>>(rpc_client.GetObject(id));
-  CHECK_EQ(vy_double_array->id(), id);
-  CHECK_EQ(vy_double_array->size(), double_array.size());
-  CHECK_EQ(vy_double_array->size(), sealed_double_array->size());
+  ObjectMeta array_meta;
+  VINEYARD_CHECK_OK(ipc_client.GetMetaData(id, array_meta));
+  ObjectID blob_id = array_meta.GetMemberMeta("buffer_").GetId();
+  std::shared_ptr<RemoteBlob> remote_buffer;
+  // Get remote blob, but it will sleep 5 second at vineyardd.
+  VINEYARD_CHECK_OK(rpc_client.GetRemoteBlob(blob_id, remote_buffer));
 
+  for (size_t i = 0; i < double_array.size(); ++i) {
+    const double *data = reinterpret_cast<const double *>(remote_buffer->data());
+    LOG(INFO) << "Read data:" << data[i];
+    CHECK_EQ(data[i], double_array[i]);
+  }
   LOG(INFO) << "Passed rpc client tests...";
+  t.join();
 
   ipc_client.Disconnect();
   rpc_client.Disconnect();

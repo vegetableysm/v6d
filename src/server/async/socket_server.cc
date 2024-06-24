@@ -769,6 +769,9 @@ bool SocketConnection::doGetRemoteBuffers(const json& root) {
   WriteGetBuffersReply(objects, {}, compress, message_out);
 
   this->doWrite(message_out, [self, objects, compress](const Status& status) {
+    LOG(INFO) << "wait 5s to send buffer";
+    sleep(5);
+    LOG(INFO) << "Start send!";
     SendRemoteBuffers(
         self->socket_, objects, 0, compress, [self](const Status& status) {
           if (!status.ok()) {
