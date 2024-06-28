@@ -172,6 +172,7 @@ Status RPCClient::Connect(const std::string& host, uint32_t port,
       session_id_, server_version_, store_match, support_rpc_compression_));
   ipc_socket_ = ipc_socket_value;
   connected_ = true;
+  support_rpc_compression_ = false;
   set_compression_enabled(support_rpc_compression_);
 
   if (!compatible_server(server_version_)) {
