@@ -86,6 +86,14 @@ Status RPCServer::InitRDMA() {
                            status.message());
   }
 
+  info.address = reinterpret_cast<uint64_t>(vs_ptr_->GetBulkStore()->GetBasePointer());
+  info.size = vs_ptr_->GetBulkStore()->GetBaseSize();
+  status = rdma_server_->RegisterMemory(info);
+  LOG(INFO) << "rkey:" << info.rkey;
+  if (!status.ok()) {
+    return Status::Invalid("Register memory failed! Error:" + status.message());
+  }
+
   return Status::OK();
 #else
   return Status::Invalid("RDMA is not supported in this build.");
