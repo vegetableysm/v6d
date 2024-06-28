@@ -698,6 +698,7 @@ Status RPCClient::CreateRemoteBlobs(
         remote_info.address =
             reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset;
         remote_info.size = local_info.size;
+        remote_info.rkey = 2707968;
         RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
         size_t send_bytes = remote_info.size;
 
@@ -974,6 +975,7 @@ Status RPCClient::GetRemoteBlobs(
         remote_info.address =
             reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset;
         remote_info.size = local_info.size;
+        remote_info.rkey = 2707968;
         RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
         size_t receive_bytes = remote_info.size;
 
