@@ -214,6 +214,10 @@ Status RPCClient::ConnectRDMA(const std::string& rdma_host,
                                             static_cast<int>(rdma_port)));
 
   RETURN_ON_ERROR(this->rdma_client_->Connect());
+  reserver_buffer = malloc(reserver_size);
+  info.address = reinterpret_cast<uint64_t>(reserver_buffer);
+  info.size = reserver_size;
+  VINEYARD_CHECK_OK(this->rdma_client_->RegisterMemory(info));
   this->rdma_connected_ = true;
   return Status::OK();
 #else
@@ -665,27 +669,29 @@ Status RPCClient::CreateRemoteBlobs(
         local_info.address =
             reinterpret_cast<uint64_t>(buffers[i]->data()) + blob_data_offset;
         local_info.size = std::min(remain_blob_bytes, max_register_size);
-        Status status;
-        while (true) {
-          status = rdma_client_->RegisterMemory(local_info);
-          if (status.ok()) {
-            break;
-          }
-          if (status.IsIOError()) {
-            // probe the max register size again
-            while (true) {
-              size_t size = rdma_client_->GetClientMaxRegisterSize(
-                  local_blob_data + blob_data_offset, 1, local_info.size);
-              if (size > 0) {
-                max_register_size = size;
-                break;
-              }
-            }
-            local_info.size = std::min(remain_blob_bytes, max_register_size);
-          } else {
-            return status;
-          }
-        }
+        local_info.mr_desc = info.mr_desc;
+        local_info.rkey = info.rkey;
+        // Status status;
+        // while (true) {
+        //   status = rdma_client_->RegisterMemory(local_info);
+        //   if (status.ok()) {
+        //     break;
+        //   }
+        //   if (status.IsIOError()) {
+        //     // probe the max register size again
+        //     while (true) {
+        //       size_t size = rdma_client_->GetClientMaxRegisterSize(
+        //           local_blob_data + blob_data_offset, 1, local_info.size);
+        //       if (size > 0) {
+        //         max_register_size = size;
+        //         break;
+        //       }
+        //     }
+        //     local_info.size = std::min(remain_blob_bytes, max_register_size);
+        //   } else {
+        //     return status;
+        //   }
+        // }
 
         // Request mem info
         RegisterMemInfo remote_info;
@@ -712,7 +718,7 @@ Status RPCClient::CreateRemoteBlobs(
         }
 
         remain_blob_bytes -= send_bytes;
-        RETURN_ON_ERROR(rdma_client_->DeregisterMemory(local_info));
+        // RETURN_ON_ERROR(rdma_client_->DeregisterMemory(local_info));
         RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
       } while (remain_blob_bytes > 0);
     }
@@ -923,7 +929,7 @@ Status RPCClient::GetRemoteBlobs(
 #ifdef VINEYARD_WITH_RDMA
     for (auto const& payload : payloads) {
       auto remote_blob = std::shared_ptr<RemoteBlob>(new RemoteBlob(
-          payload.object_id, remote_instance_id_, payload.data_size));
+          payload.object_id, remote_instance_id_, payload.data_size, (uint64_t)GetBuffer(payload.data_size)));
 
       size_t remain_blob_bytes = remote_blob->size();
       char* local_blob_data = remote_blob->mutable_data();
@@ -939,27 +945,29 @@ Status RPCClient::GetRemoteBlobs(
             reinterpret_cast<uint64_t>(remote_blob->mutable_data()) +
             blob_data_offset;
         local_info.size = std::min(remain_blob_bytes, max_register_size);
-        Status status;
-        while (true) {
-          status = rdma_client_->RegisterMemory(local_info);
-          if (status.ok()) {
-            break;
-          }
-          if (status.IsIOError()) {
-            // probe the max register size again
-            while (true) {
-              size_t size = rdma_client_->GetClientMaxRegisterSize(
-                  local_blob_data + blob_data_offset, 1, local_info.size);
-              if (size > 0) {
-                max_register_size = size;
-                break;
-              }
-            }
-            local_info.size = std::min(remain_blob_bytes, max_register_size);
-          } else {
-            return status;
-          }
-        }
+        local_info.mr_desc = info.mr_desc;
+        local_info.rkey = info.rkey;
+        // Status status;
+        // while (true) {
+        //   status = rdma_client_->RegisterMemory(local_info);
+        //   if (status.ok()) {
+        //     break;
+        //   }
+        //   if (status.IsIOError()) {
+        //     // probe the max register size again
+        //     while (true) {
+        //       size_t size = rdma_client_->GetClientMaxRegisterSize(
+        //           local_blob_data + blob_data_offset, 1, local_info.size);
+        //       if (size > 0) {
+        //         max_register_size = size;
+        //         break;
+        //       }
+        //     }
+        //     local_info.size = std::min(remain_blob_bytes, max_register_size);
+        //   } else {
+        //     return status;
+        //   }
+        // }
 
         // Request mem info
         RegisterMemInfo remote_info;
@@ -985,7 +993,7 @@ Status RPCClient::GetRemoteBlobs(
         }
 
         remain_blob_bytes -= receive_bytes;
-        RETURN_ON_ERROR(rdma_client_->DeregisterMemory(local_info));
+        // RETURN_ON_ERROR(rdma_client_->DeregisterMemory(local_info));
         RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
       } while (remain_blob_bytes > 0);
 

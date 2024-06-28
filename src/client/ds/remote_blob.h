@@ -140,6 +140,9 @@ class RemoteBlob : public Registered<RemoteBlob> {
   RemoteBlob(const ObjectID id, const InstanceID instance_id,
              const size_t size);
 
+  RemoteBlob(const ObjectID id, const InstanceID instance_id,
+             const size_t size, uint64_t addr);
+
   char* mutable_data() const;
 
   ObjectID id_;
@@ -162,6 +165,7 @@ class RemoteBlobWriter {
  public:
   explicit RemoteBlobWriter(const size_t size);
   explicit RemoteBlobWriter(std::shared_ptr<MutableBuffer> const& buffer);
+  RemoteBlobWriter(size_t size, uint64_t addr);
 
   ~RemoteBlobWriter();
 

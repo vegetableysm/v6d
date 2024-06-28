@@ -135,6 +135,15 @@ RemoteBlob::RemoteBlob(const ObjectID id, const InstanceID instance_id,
   }
 }
 
+RemoteBlob::RemoteBlob(const ObjectID id, const InstanceID instance_id,
+             const size_t size, uint64_t addr) {
+  this->id_ = id;
+  this->instance_id_ = instance_id;
+  this->size_ = size;
+  this->buffer_ = std::dynamic_pointer_cast<MutableBuffer>(
+      MutableBuffer::Wrap(reinterpret_cast<uint8_t*>(addr), size));
+}
+
 char* RemoteBlob::mutable_data() const {
   if (size_ == 0) {
     return nullptr;
@@ -156,6 +165,11 @@ RemoteBlobWriter::RemoteBlobWriter(const size_t size) {
         "Failed to malloc the internal buffer of size " + std::to_string(size));
     this->buffer_ = std::move(buffer);
   }
+}
+
+RemoteBlobWriter::RemoteBlobWriter(size_t size, uint64_t addr) {
+  this->buffer_ = std::dynamic_pointer_cast<MutableBuffer>(
+      MutableBuffer::Wrap(reinterpret_cast<uint8_t*>(addr), size));
 }
 
 RemoteBlobWriter::RemoteBlobWriter(std::shared_ptr<MutableBuffer> const& buffer)

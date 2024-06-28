@@ -447,8 +447,19 @@ class RPCClient final : public ClientBase {
   std::string rdma_endpoint_;
 #ifdef VINEYARD_WITH_RDMA
   std::shared_ptr<RDMAClient> rdma_client_;
+  RegisterMemInfo info;
 #endif
   mutable bool rdma_connected_ = false;
+  void *reserver_buffer = nullptr;
+  size_t reserver_size = 1024UL * 1024 * 1024 * 15;
+  size_t buffer_offset = 0;
+
+public:
+  void *GetBuffer(size_t size) {
+    void *buffer = reinterpret_cast<void *>(reinterpret_cast<uint64_t>(reserver_buffer) + buffer_offset);
+    buffer_offset += size;
+    return buffer;
+  }
 
   friend class Client;
 };
