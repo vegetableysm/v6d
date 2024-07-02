@@ -56,6 +56,9 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
   cq_attr.wait_obj = FI_WAIT_NONE;
   cq_attr.wait_cond = FI_CQ_COND_NONE;
   cq_attr.size = ptr->fi->rx_attr->size;
+  printf("cq_attr.wait_obj:%d\n", cq_attr.wait_obj);
+  printf("dq_attr.wait_cond:%d\n", cq_attr.wait_cond);
+  printf("cq_cttr.size:%d\n", cq_attr.size);
   CHECK_ERROR(!fi_cq_open(ptr->domain, &cq_attr, &ptr->rxcq, NULL),
               "fi_cq_open failed.");
 
@@ -300,7 +303,7 @@ Status RDMAClientCreator::CreateRDMARemoteNodeInfo(RDMARemoteNodeInfo& info,
   }
 
   hints->caps =
-      FI_MSG | FI_RMA | FI_WRITE | FI_REMOTE_WRITE | FI_READ | FI_REMOTE_READ;
+      FI_MSG | FI_RMA | FI_WRITE | FI_REMOTE_WRITE;
   hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
   hints->mode = FI_CONTEXT;
   hints->domain_attr->threading = FI_THREAD_DOMAIN;
@@ -312,6 +315,19 @@ Status RDMAClientCreator::CreateRDMARemoteNodeInfo(RDMARemoteNodeInfo& info,
   hints->fabric_attr = new fi_fabric_attr;
   memset(hints->fabric_attr, 0, sizeof *(hints->fabric_attr));
   hints->fabric_attr->prov_name = strdup("verbs");
+
+	printf("hints->caps:%lu\n", hints->caps);
+	printf("hints->domain_attr->resource_mgmt:%d\n", hints->domain_attr->resource_mgmt);
+	printf("hints->mode:%lu\n", hints->mode);
+	printf("hints->addr_format:%d\n", hints->addr_format);
+	printf("hints->tx_attr->tclass:%d\n", hints->tx_attr->tclass);
+	printf("hints->fabric_attr->prov_name:%s\n", hints->fabric_attr->prov_name);
+	printf("hints->tx_attr->op_flags:%lu\n", hints->tx_attr->op_flags);
+  printf("hints->domain_attr->mr_mode:%d\n", hints->domain_attr->mr_mode);
+  printf("hints->ep_attr->type :%u\n", hints->ep_attr->type);
+  printf("hints->domain_attr->cq_data_size:%lu\n", hints->domain_attr->cq_data_size);
+  printf("hints->domain_attr->data_progress:%d\n", hints->domain_attr->data_progress);
+  printf("hints->domain_attr->control_progress:%d\n", hints->domain_attr->control_progress);
 
   RETURN_ON_ERROR(CreateRDMARemoteNodeInfo(info, hints, server_address, port));
   IRDMA::FreeInfo(hints);
