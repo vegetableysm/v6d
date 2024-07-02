@@ -20,7 +20,7 @@ limitations under the License.
 
 #include <rdma/fabric.h>
 #include <string>
-
+#include <chrono>
 #include <rdma/fi_eq.h>
 
 #include "common/util/logging.h"
@@ -114,7 +114,7 @@ struct RDMARemoteNodeInfo {
   fid_domain* domain;
 };
 
-#define VINEYARD_FIVERSION FI_VERSION(1, 21)
+#define VINEYARD_FIVERSION FI_VERSION(1, 20)
 
 static int ft_spin_for_comp_(struct fid_cq *cq, uint64_t *cur,
 			    uint64_t total, int timeout)
@@ -126,6 +126,7 @@ static int ft_spin_for_comp_(struct fid_cq *cq, uint64_t *cur,
 	if (timeout >= 0)
 		clock_gettime(CLOCK_MONOTONIC, &a);
 
+  auto start_ = std::chrono::high_resolution_clock::now();
 	do {
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
@@ -142,6 +143,9 @@ static int ft_spin_for_comp_(struct fid_cq *cq, uint64_t *cur,
 			}
 		}
 	} while (total - *cur > 0);
+    auto end_ = std::chrono::high_resolution_clock::now();
+    auto duration_ = std::chrono::duration_cast<std::chrono::microseconds>(end_ - start_);
+    LOG(INFO) << "fi_cq_read duration: " << duration_.count() << "us";
 
 	return 0;
 }

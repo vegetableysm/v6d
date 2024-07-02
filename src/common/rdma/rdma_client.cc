@@ -57,8 +57,12 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
   cq_attr.wait_cond = FI_CQ_COND_NONE;
   cq_attr.size = ptr->fi->rx_attr->size;
   printf("cq_attr.wait_obj:%d\n", cq_attr.wait_obj);
-  printf("dq_attr.wait_cond:%d\n", cq_attr.wait_cond);
-  printf("cq_cttr.size:%d\n", cq_attr.size);
+  printf("cq_attr.wait_cond:%d\n", cq_attr.wait_cond);
+  printf("cq_attr.size:%d\n", cq_attr.size);
+  printf("cq_attr.flags:%d\n", cq_attr.flags);
+  printf("cq_attr.format:%d\n", cq_attr.format);
+  printf("cq_attr.signaling_vector:%d\n", cq_attr.signaling_vector);
+  printf("cq_attr.wait_set:%p\n", cq_attr.wait_set);
   CHECK_ERROR(!fi_cq_open(ptr->domain, &cq_attr, &ptr->rxcq, &ptr->rxcq),
               "fi_cq_open failed.");
 
