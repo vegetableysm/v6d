@@ -95,13 +95,20 @@ Status IRDMA::RegisterMemory(fid_mr** mr, fid_domain* domain, void* address,
   iov.iov_len = size;
   mr_attr.mr_iov = &iov;
   mr_attr.iov_count = 1;
-  mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE | FI_READ | FI_WRITE;
+  // mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE | FI_READ | FI_WRITE;
+  mr_attr.access = FI_REMOTE_WRITE | FI_WRITE | FI_RECV | FI_SEND;
   mr_attr.offset = 0;
   mr_attr.iface = FI_HMEM_SYSTEM;
   mr_attr.context = NULL;
+	printf("attr->oiv_count:%d\n", mr_attr.iov_count);
+	printf("attr->access:%llu\n", mr_attr.access);
+	printf("attr->offset:%llu\n", mr_attr.offset);
+	printf("attr->requested_key:%llu\n", mr_attr.requested_key);
+	printf("attr->iface:%d\n", mr_attr.iface);
+	printf("attr->context:%p\n", mr_attr.context);
   VLOG(100) << "Try to register memory region: size = " << size;
 
-  int ret = fi_mr_regattr(domain, &mr_attr, FI_HMEM_DEVICE_ONLY, mr);
+  int ret = fi_mr_regattr(domain, &mr_attr, FI_HMEM_SYSTEM, mr);
   if (ret == -FI_EIO) {
     return Status::IOError("Failed to register memory region:" +
                            std::to_string(ret));

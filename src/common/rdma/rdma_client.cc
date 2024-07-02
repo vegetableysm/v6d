@@ -59,11 +59,11 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
   printf("cq_attr.wait_obj:%d\n", cq_attr.wait_obj);
   printf("dq_attr.wait_cond:%d\n", cq_attr.wait_cond);
   printf("cq_cttr.size:%d\n", cq_attr.size);
-  CHECK_ERROR(!fi_cq_open(ptr->domain, &cq_attr, &ptr->rxcq, NULL),
+  CHECK_ERROR(!fi_cq_open(ptr->domain, &cq_attr, &ptr->rxcq, &ptr->rxcq),
               "fi_cq_open failed.");
 
   cq_attr.size = ptr->fi->tx_attr->size;
-  CHECK_ERROR(!fi_cq_open(ptr->domain, &cq_attr, &ptr->txcq, NULL),
+  CHECK_ERROR(!fi_cq_open(ptr->domain, &cq_attr, &ptr->txcq, &ptr->txcq),
               "fi_cq_open failed.");
 
   CHECK_ERROR(!fi_endpoint(ptr->domain, ptr->fi, &ptr->ep, NULL),
@@ -76,6 +76,8 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
 
   CHECK_ERROR(!fi_ep_bind(ptr->ep, &ptr->txcq->fid, FI_SEND),
               "fi_ep_bind txcq failed.");
+  printf("tx flags:%llu\n", FI_SEND);
+  printf("rx flags:%llu\n", FI_RECV);
 
   CHECK_ERROR(!fi_enable(ptr->ep), "fi_enable failed.");
 

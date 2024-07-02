@@ -731,7 +731,7 @@ Status RPCClient::CreateRemoteBlobs(
 
         remain_blob_bytes -= send_bytes;
         // RETURN_ON_ERROR(rdma_client_->DeregisterMemory(local_info));
-        RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
+        // RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
       } while (remain_blob_bytes > 0);
     }
 #endif
@@ -1022,7 +1022,7 @@ Status RPCClient::GetRemoteBlobs(
 
         remain_blob_bytes -= receive_bytes;
         // RETURN_ON_ERROR(rdma_client_->DeregisterMemory(local_info));
-        RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
+        // RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
       } while (remain_blob_bytes > 0);
 
       id_payload_map[payload.object_id] = remote_blob;
