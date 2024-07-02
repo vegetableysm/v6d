@@ -21,6 +21,8 @@ limitations under the License.
 #include <rdma/fabric.h>
 #include <string>
 
+#include <rdma/fi_eq.h>
+
 #include "common/util/logging.h"
 #include "common/util/status.h"
 
@@ -113,6 +115,60 @@ struct RDMARemoteNodeInfo {
 };
 
 #define VINEYARD_FIVERSION FI_VERSION(1, 21)
+
+static int ft_spin_for_comp_(struct fid_cq *cq, uint64_t *cur,
+			    uint64_t total, int timeout)
+{
+	struct fi_cq_err_entry comp;
+	struct timespec a, b;
+	int ret;
+
+	if (timeout >= 0)
+		clock_gettime(CLOCK_MONOTONIC, &a);
+
+	do {
+		ret = fi_cq_read(cq, &comp, 1);
+		if (ret > 0) {
+			if (timeout >= 0)
+				clock_gettime(CLOCK_MONOTONIC, &a);
+			(*cur)++;
+		} else if (ret < 0 && ret != -FI_EAGAIN) {
+			return ret;
+		} else if (timeout >= 0) {
+			clock_gettime(CLOCK_MONOTONIC, &b);
+			if ((b.tv_sec - a.tv_sec) > timeout) {
+				fprintf(stderr, "%ds timeout expired\n", timeout);
+				return -FI_ENODATA;
+			}
+		}
+	} while (total - *cur > 0);
+
+	return 0;
+}
+
+static int ft_read_cq_(struct fid_cq *cq, uint64_t *cur,
+		uint64_t total, int timeout)
+{
+	return ft_spin_for_comp_(cq, cur, total, timeout);
+}
+
+static int ft_get_cq_comp_(struct fid_cq *cq, uint64_t *cur,
+		    uint64_t total, int timeout)
+{
+	int ret;
+
+	ret = ft_read_cq_(cq, cur, total, timeout);
+
+	if (ret) {
+		if (ret == -FI_EAVAIL) {
+      return -1;
+			(*cur)++;
+		} else {
+			return -1;
+		}
+	}
+	return ret;
+}
 
 }  // namespace vineyard
 

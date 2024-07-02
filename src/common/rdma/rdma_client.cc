@@ -132,23 +132,26 @@ Status RDMAClient::GetRXCompletion(int timeout, void** context) {
 }
 
 Status RDMAClient::GetTXCompletion(int timeout, void** context) {
-  while (true) {
-    int ret = this->GetCompletion(txcq, timeout == -1 ? 500 : timeout, context);
-    if (ret == -FI_ETIMEDOUT) {
-      if (timeout > 0) {
-        return Status::Invalid("GetTXCompletion timeout");
-      } else {
-        if (state == STOPED) {
-          return Status::Invalid("GetTXCompletion stopped");
-        }
-        continue;
-      }
-    } else if (ret < 0) {
-      return Status::Invalid("GetTXCompletion failed:" + std::to_string(ret));
-    } else {
-      return Status::OK();
-    }
-  }
+  // while (true) {
+  //   int ret = this->GetCompletion(txcq, timeout == -1 ? 500 : timeout, context);
+  //   if (ret == -FI_ETIMEDOUT) {
+  //     if (timeout > 0) {
+  //       return Status::Invalid("GetTXCompletion timeout");
+  //     } else {
+  //       if (state == STOPED) {
+  //         return Status::Invalid("GetTXCompletion stopped");
+  //       }
+  //       continue;
+  //     }
+  //   } else if (ret < 0) {
+  //     return Status::Invalid("GetTXCompletion failed:" + std::to_string(ret));
+  //   } else {
+  //     return Status::OK();
+  //   }
+  // }
+  uint64_t tx_comp_count = 0;
+  ft_get_cq_comp_(txcq, &tx_comp_count, 1, -1);
+  return Status::OK();
 }
 
 Status RDMAClient::SendMemInfoToServer(void* buffer, uint64_t size) {
