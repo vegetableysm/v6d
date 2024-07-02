@@ -622,6 +622,7 @@ Status RPCClient::CreateRemoteBlobs(
     std::vector<std::shared_ptr<RemoteBlobWriter>> const& buffers,
     std::vector<ObjectMeta>& metas) {
   ENSURE_CONNECTED(this);
+  auto start = std::chrono::high_resolution_clock::now();
   std::vector<size_t> sizes;
   for (auto const& buffer : buffers) {
     VINEYARD_ASSERT(buffer != nullptr,
@@ -652,6 +653,10 @@ Status RPCClient::CreateRemoteBlobs(
     RETURN_ON_ERROR(
         ReadCreateBuffersReply(message_in, ids, payloads, fds_sent));
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  LOG(INFO) << "Create remote blobs cost: " << duration.count() << " us";
 
   // send the actual payload
   if (rdma_connected_) {
@@ -764,6 +769,7 @@ Status RPCClient::CreateRemoteBlobs(
 
   // add the metadata to allow adding the returned remote blob as member
   // without an extra get operation.
+  start = std::chrono::high_resolution_clock::now();
   for (size_t i = 0; i < payloads.size(); ++i) {
     ObjectMeta meta;
     meta.SetId(ids[i]);
@@ -774,6 +780,10 @@ Status RPCClient::CreateRemoteBlobs(
     meta.AddKeyValue("transient", true);
     metas.emplace_back(meta);
   }
+  end = std::chrono::high_resolution_clock::now();
+  duration =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  LOG(INFO) << "Fill payloads cost: " << duration.count() << " us";
 
   return Status::OK();
 }
@@ -906,6 +916,7 @@ Status RPCClient::GetRemoteBlobs(
     std::vector<ObjectID> const& ids, const bool unsafe,
     std::vector<std::shared_ptr<RemoteBlob>>& remote_blobs) {
   ENSURE_CONNECTED(this);
+  auto start_ = std::chrono::high_resolution_clock::now();
   std::shared_ptr<Decompressor> decompressor;
   if (compression_enabled()) {
     decompressor = std::make_shared<Decompressor>();
@@ -932,6 +943,10 @@ Status RPCClient::GetRemoteBlobs(
                        std::to_string(id_set.size()));
 
   std::unordered_map<ObjectID, std::shared_ptr<RemoteBlob>> id_payload_map;
+  auto end_ = std::chrono::high_resolution_clock::now();
+  auto duration_ =
+      std::chrono::duration_cast<std::chrono::microseconds>(end_ - start_);
+  LOG(INFO) << "GetRemoteBlobs: " << duration_.count() << " us";
   if (rdma_connected_) {
 #ifdef VINEYARD_WITH_RDMA
     for (auto const& payload : payloads) {
@@ -1031,6 +1046,7 @@ Status RPCClient::GetRemoteBlobs(
   // clear the result container
   remote_blobs.clear();
 
+  auto start = std::chrono::high_resolution_clock::now();
   for (auto const& id : ids) {
     auto it = id_payload_map.find(id);
     if (it == id_payload_map.end()) {
@@ -1039,6 +1055,10 @@ Status RPCClient::GetRemoteBlobs(
       remote_blobs.emplace_back(it->second);
     }
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  LOG(INFO) << "GetRemoteBlobs: " << duration.count() << " us";
   return Status::OK();
 }
 
