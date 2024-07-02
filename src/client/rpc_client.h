@@ -451,10 +451,13 @@ class RPCClient final : public ClientBase {
 #endif
   mutable bool rdma_connected_ = false;
   void *reserver_buffer = nullptr;
-  size_t reserver_size = 1024UL * 1024 * 1024 * 15;
+  size_t reserver_size = 1024UL * 1024 * 1024 * 7;
   size_t buffer_offset = 0;
+  uint64_t rkey = 0;
 
 public:
+  void SetRkey(uint64_t rkey) { this->rkey = rkey; }
+
   void *GetBuffer(size_t size) {
     void *buffer = reinterpret_cast<void *>(reinterpret_cast<uint64_t>(reserver_buffer) + buffer_offset);
     buffer_offset += size;

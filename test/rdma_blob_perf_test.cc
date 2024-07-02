@@ -30,7 +30,7 @@ limitations under the License.
 using namespace vineyard;  // NOLINT(build/namespaces)
 
 // constexpr uint64_t iterator = 10000;
-constexpr uint64_t total_mem = 1024UL * 1024 * 1024 * 7;
+constexpr uint64_t total_mem = 1024UL * 1024 * 512;
 constexpr uint64_t warm_up = 1;
 
 void TestCreateBlob(RPCClient& client, std::vector<ObjectID> &warm_up_ids, std::vector<ObjectID> &ids, size_t size) {
@@ -117,18 +117,21 @@ void CheckBlobValue(std::vector<std::shared_ptr<RemoteBlob>> &warm_up_local_buff
 
 // Test 512K~512M blob
 int main(int argc, const char** argv) {
-  if (argc < 5) {
-    LOG(ERROR) << "usage: " << argv[0] << " <rpc_endpoint>" << " <rdma_endpoint>" << " <min_size>" << " <max_size>";
+  if (argc < 6) {
+    LOG(ERROR) << "usage: " << argv[0] << " <rpc_endpoint>" << " <rdma_endpoint>" << " <rkey>" << " <min_size>" << " <max_size>";
+    return -1;
   }
   std::string rpc_endpoint = std::string(argv[1]);
   std::string rdma_endpoint = std::string(argv[2]);
   RPCClient client;
   VINEYARD_CHECK_OK(client.Connect(rpc_endpoint, "", "", rdma_endpoint));
+  uint64_t rkey = std::stoull(argv[3]);
+  client.SetRkey(rkey);
 
   uint64_t min_size = 1024 * 1024 * 2; // 512K
   uint64_t max_size = 1024 * 1024 * 2; // 64M
-  min_size = std::stoull(argv[3]) * 1024 * 1024;
-  max_size = std::stoull(argv[4]) * 1024 * 1024;
+  min_size = std::stoull(argv[4]) * 1024 * 1024;
+  max_size = std::stoull(argv[5]) * 1024 * 1024;
   if (min_size == 0) {
     min_size = 1024 * 512;
   }

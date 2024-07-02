@@ -86,6 +86,14 @@ Status RPCServer::InitRDMA() {
                            status.message());
   }
 
+  info.address = reinterpret_cast<uint64_t>(vs_ptr_->GetBulkStore()->GetBasePointer());
+  info.size = vs_ptr_->GetBulkStore()->GetBaseSize();
+  status = rdma_server_->RegisterMemory(info);
+  LOG(INFO) << "rkey:" << info.rkey;
+  if (!status.ok()) {
+    return Status::Invalid("Register memory failed! Error:" + status.message());
+  }
+
   return Status::OK();
 #else
   return Status::Invalid("RDMA is not supported in this build.");
@@ -196,51 +204,52 @@ void RPCServer::doVineyardRequestMemory(VineyardRecvContext* recv_context,
             << " size: " << remote_request_mem_info.size;
 
   // Register mem
-  Status status;
-  while (true) {
-    status = rdma_server_->RegisterMemory(remote_request_mem_info);
-    if (status.ok()) {
-      break;
-    }
-    if (status.IsIOError()) {
-      // probe the max register size again
-      VLOG(100) << "Probe the max register size again.";
-      while (true) {
-        size_t size = rdma_server_->GetServerMaxRegisterSize(
-            reinterpret_cast<void*>(remote_request_mem_info.address), 1,
-            max_register_size / 1024 / 1024 / 1024);
-        if (size > 0) {
-          max_register_size = size;
-          break;
-        }
-      }
-      remote_request_mem_info.size =
-          std::min(recv_msg->remoteMemInfo.len, max_register_size);
-    } else {
-      break;
-    }
-  }
-  if (!status.ok()) {
-    LOG(ERROR) << "Failed to register mem.";
-    void* msg = nullptr;
-    rdma_server_->GetTXFreeMsgBuffer(msg);
-    VineyardMsg* send_msg = reinterpret_cast<VineyardMsg*>(msg);
-    send_msg->type = VINEYARD_MSG_REQUEST_MEM;
-    send_msg->remoteMemInfo.remote_address = 0;
-    send_msg->remoteMemInfo.key = -1;
-    send_msg->remoteMemInfo.len = 0;
+  // Status status;
+  // while (true) {
+  //   status = rdma_server_->RegisterMemory(remote_request_mem_info);
+  //   if (status.ok()) {
+  //     break;
+  //   }
+  //   if (status.IsIOError()) {
+  //     // probe the max register size again
+  //     VLOG(100) << "Probe the max register size again.";
+  //     while (true) {
+  //       size_t size = rdma_server_->GetServerMaxRegisterSize(
+  //           reinterpret_cast<void*>(remote_request_mem_info.address), 1,
+  //           max_register_size / 1024 / 1024 / 1024);
+  //       if (size > 0) {
+  //         max_register_size = size;
+  //         break;
+  //       }
+  //     }
+  //     remote_request_mem_info.size =
+  //         std::min(recv_msg->remoteMemInfo.len, max_register_size);
+  //   } else {
+  //     break;
+  //   }
+  // }
+  // if (!status.ok()) {
+  //   LOG(ERROR) << "Failed to register mem.";
+  //   void* msg = nullptr;
+  //   rdma_server_->GetTXFreeMsgBuffer(msg);
+  //   VineyardMsg* send_msg = reinterpret_cast<VineyardMsg*>(msg);
+  //   send_msg->type = VINEYARD_MSG_REQUEST_MEM;
+  //   send_msg->remoteMemInfo.remote_address = 0;
+  //   send_msg->remoteMemInfo.key = -1;
+  //   send_msg->remoteMemInfo.len = 0;
 
-    VineyardSendContext* send_context = new VineyardSendContext();
-    memset(&send_context->attr, 0, sizeof(send_context->attr));
-    send_context->attr.msg_buffer = msg;
-    rdma_server_->Send(recv_context->rdma_conn_id,
-                       recv_context->attr.msg_buffer, sizeof(VineyardMsg),
-                       recv_context);
-    rdma_server_->Recv(recv_context->rdma_conn_id,
-                       reinterpret_cast<void*>(recv_msg), sizeof(VineyardMsg),
-                       reinterpret_cast<void*>(recv_context));
-    return;
-  }
+  //   VineyardSendContext* send_context = new VineyardSendContext();
+  //   memset(&send_context->attr, 0, sizeof(send_context->attr));
+  //   send_context->attr.msg_buffer = msg;
+  //   rdma_server_->Send(recv_context->rdma_conn_id,
+  //                      recv_context->attr.msg_buffer, sizeof(VineyardMsg),
+  //                      recv_context);
+  //   rdma_server_->Recv(recv_context->rdma_conn_id,
+  //                      reinterpret_cast<void*>(recv_msg), sizeof(VineyardMsg),
+  //                      reinterpret_cast<void*>(recv_context));
+  //   return;
+  // }
+  remote_request_mem_info.rkey = info.rkey;
 
   VLOG(100) << "Register memory"
             << " address: "
@@ -279,41 +288,41 @@ void RPCServer::doVineyardRequestMemory(VineyardRecvContext* recv_context,
 void RPCServer::doVineyardReleaseMemory(VineyardRecvContext* recv_context,
                                         VineyardMsg* recv_msg) {
   VLOG(100) << "Receive release msg!";
-  RegisterMemInfo remote_request_mem_info;
-  remote_request_mem_info.address = recv_msg->remoteMemInfo.remote_address;
-  // remote_register_mem_info.rkey = recv_msg->remoteMemInfo.key;
-  remote_request_mem_info.size = recv_msg->remoteMemInfo.len;
-  VLOG(100) << "Receive release address: "
-            << reinterpret_cast<void*>(remote_request_mem_info.address);
-  if (remote_mem_infos_.find(recv_context->rdma_conn_id) ==
-      remote_mem_infos_.end()) {
-    LOG(ERROR) << "Receive release mem info from unknown connection!";
-    return;
-  }
-  if (remote_mem_infos_[recv_context->rdma_conn_id].find(
-          remote_request_mem_info) ==
-      remote_mem_infos_[recv_context->rdma_conn_id].end()) {
-    LOG(ERROR) << "Receive release mem info from unknown address!";
-    rdma_server_->Recv(recv_context->rdma_conn_id,
-                       reinterpret_cast<void*>(recv_msg), sizeof(VineyardMsg),
-                       reinterpret_cast<void*>(recv_context));
-    return;
-  }
+  // RegisterMemInfo remote_request_mem_info;
+  // remote_request_mem_info.address = recv_msg->remoteMemInfo.remote_address;
+  // // remote_register_mem_info.rkey = recv_msg->remoteMemInfo.key;
+  // remote_request_mem_info.size = recv_msg->remoteMemInfo.len;
+  // VLOG(100) << "Receive release address: "
+  //           << reinterpret_cast<void*>(remote_request_mem_info.address);
+  // if (remote_mem_infos_.find(recv_context->rdma_conn_id) ==
+  //     remote_mem_infos_.end()) {
+  //   LOG(ERROR) << "Receive release mem info from unknown connection!";
+  //   return;
+  // }
+  // if (remote_mem_infos_[recv_context->rdma_conn_id].find(
+  //         remote_request_mem_info) ==
+  //     remote_mem_infos_[recv_context->rdma_conn_id].end()) {
+  //   LOG(ERROR) << "Receive release mem info from unknown address!";
+  //   rdma_server_->Recv(recv_context->rdma_conn_id,
+  //                      reinterpret_cast<void*>(recv_msg), sizeof(VineyardMsg),
+  //                      reinterpret_cast<void*>(recv_context));
+  //   return;
+  // }
 
-  remote_request_mem_info = *remote_mem_infos_[recv_context->rdma_conn_id].find(
-      remote_request_mem_info);
+  // remote_request_mem_info = *remote_mem_infos_[recv_context->rdma_conn_id].find(
+  //     remote_request_mem_info);
 
-  // Deregister mem
-  VLOG(100) << "Deregister memory"
-            << " address: "
-            << reinterpret_cast<void*>(remote_request_mem_info.address)
-            << " size: " << remote_request_mem_info.size
-            << " rkey: " << remote_request_mem_info.rkey
-            << " mr_desc: " << remote_request_mem_info.mr_desc
-            << " fid_mr:" << remote_request_mem_info.mr;
-  VINEYARD_CHECK_OK(rdma_server_->DeregisterMemory(remote_request_mem_info));
-  remote_mem_infos_[recv_context->rdma_conn_id].erase(remote_request_mem_info);
-  VLOG(100) << "Wait next request.";
+  // // Deregister mem
+  // VLOG(100) << "Deregister memory"
+  //           << " address: "
+  //           << reinterpret_cast<void*>(remote_request_mem_info.address)
+  //           << " size: " << remote_request_mem_info.size
+  //           << " rkey: " << remote_request_mem_info.rkey
+  //           << " mr_desc: " << remote_request_mem_info.mr_desc
+  //           << " fid_mr:" << remote_request_mem_info.mr;
+  // VINEYARD_CHECK_OK(rdma_server_->DeregisterMemory(remote_request_mem_info));
+  // remote_mem_infos_[recv_context->rdma_conn_id].erase(remote_request_mem_info);
+  // VLOG(100) << "Wait next request.";
   rdma_server_->Recv(recv_context->rdma_conn_id,
                      reinterpret_cast<void*>(recv_msg), sizeof(VineyardMsg),
                      recv_context);

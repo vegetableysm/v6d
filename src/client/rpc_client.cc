@@ -16,6 +16,7 @@ limitations under the License.
 #include "client/rpc_client.h"
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -698,13 +699,14 @@ Status RPCClient::CreateRemoteBlobs(
         remote_info.address =
             reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset;
         remote_info.size = local_info.size;
-        remote_info.rkey = 2707968;
-        RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
+        remote_info.rkey = rkey;
+        // RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
         size_t send_bytes = remote_info.size;
 
         // Write data
         size_t remain_bytes = send_bytes;
         while (remain_bytes > 0) {
+          auto start = std::chrono::high_resolution_clock::now();
           size_t write_bytes =
               std::min(remain_bytes, rdma_client_->GetMaxTransferBytes());
           size_t write_data_offset = send_bytes - remain_bytes;
@@ -715,6 +717,10 @@ Status RPCClient::CreateRemoteBlobs(
                   write_data_offset,
               remote_info.rkey, local_info.mr_desc, nullptr));
           RETURN_ON_ERROR(rdma_client_->GetTXCompletion(-1, nullptr));
+          auto end = std::chrono::high_resolution_clock::now();
+          auto duration =
+              std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+          LOG(INFO) << "Write data cost: " << duration.count() << " us";
           remain_bytes -= write_bytes;
         }
 
@@ -975,8 +981,8 @@ Status RPCClient::GetRemoteBlobs(
         remote_info.address =
             reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset;
         remote_info.size = local_info.size;
-        remote_info.rkey = 2707968;
-        RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
+        remote_info.rkey = rkey;
+        // RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
         size_t receive_bytes = remote_info.size;
 
         // Read data
@@ -985,12 +991,17 @@ Status RPCClient::GetRemoteBlobs(
           size_t read_bytes =
               std::min(remain_bytes, rdma_client_->GetMaxTransferBytes());
           size_t read_data_offset = receive_bytes - remain_bytes;
+          auto start = std::chrono::high_resolution_clock::now();
           RETURN_ON_ERROR(rdma_client_->Read(
               local_blob_data + blob_data_offset + read_data_offset, read_bytes,
               reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset +
                   read_data_offset,
               remote_info.rkey, local_info.mr_desc, nullptr));
           RETURN_ON_ERROR(rdma_client_->GetTXCompletion(-1, nullptr));
+          auto end = std::chrono::high_resolution_clock::now();
+          auto duration =
+              std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+          LOG(INFO) << "Read data cost: " << duration.count() << " us";
           remain_bytes -= read_bytes;
         }
 
