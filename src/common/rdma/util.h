@@ -26,7 +26,7 @@ limitations under the License.
 #include "common/util/logging.h"
 #include "common/util/status.h"
 
-namespace vineyard {
+extern "C" {
 
 #define CHECK_ERROR(condition, message) \
   if (!(condition)) {                   \
@@ -170,7 +170,7 @@ static int ft_get_cq_comp_(struct fid_cq *cq, uint64_t *cur,
 	return ret;
 }
 
-}  // namespace vineyard
+}  // extern "C"
 
 #endif
 
