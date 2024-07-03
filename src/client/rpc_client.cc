@@ -187,6 +187,7 @@ Status RPCClient::Connect(const std::string& host, uint32_t port,
   // RPC client doesn't have a concrete instance id, even the unspecified
   // instance id.
   instance_id_ = UnspecifiedInstanceID() - 1;
+  reserver_buffer = malloc(reserver_size);
 
   if (rdma_host.length() > 0) {
     Status status = ConnectRDMA(rdma_host, rdma_port);
@@ -215,7 +216,6 @@ Status RPCClient::ConnectRDMA(const std::string& rdma_host,
                                             static_cast<int>(rdma_port)));
 
   RETURN_ON_ERROR(this->rdma_client_->Connect());
-  reserver_buffer = malloc(reserver_size);
   info.address = reinterpret_cast<uint64_t>(reserver_buffer);
   info.size = reserver_size;
   VINEYARD_CHECK_OK(this->rdma_client_->RegisterMemory(info));
@@ -661,22 +661,29 @@ Status RPCClient::CreateRemoteBlobs(
   // send the actual payload
   if (rdma_connected_) {
 #ifdef VINEYARD_WITH_RDMA
+    std::vector<std::thread> threads;
     for (size_t i = 0; i < payloads.size(); ++i) {
-      size_t remain_blob_bytes = buffers[i]->size();
-      char* local_blob_data = buffers[i]->data();
-      uint64_t max_register_size = buffers[i]->size();
+      // size_t remain_blob_bytes = buffers[i]->size();
+      // char* local_blob_data = buffers[i]->data();
+      // uint64_t max_register_size = buffers[i]->size();
+      threads.push_back(std::thread([this, &buffers, &payloads, i](){
+        VINEYARD_CHECK_OK(this->rdma_client_->Write(
+            buffers[i]->data(), buffers[i]->size(),
+            reinterpret_cast<uint64_t>(payloads[i].pointer), rkey, info.mr_desc, nullptr));
+        VINEYARD_CHECK_OK(this->rdma_client_->GetTXCompletion(-1, nullptr));
+      }));
 
-      do {
-        size_t blob_data_offset = buffers[i]->size() - remain_blob_bytes;
-        void* remote_blob_data = payloads[i].pointer;
+      // do {
+      //   size_t blob_data_offset = buffers[i]->size() - remain_blob_bytes;
+      //   void* remote_blob_data = payloads[i].pointer;
 
-        // Register mem
-        RegisterMemInfo local_info;
-        local_info.address =
-            reinterpret_cast<uint64_t>(buffers[i]->data()) + blob_data_offset;
-        local_info.size = std::min(remain_blob_bytes, max_register_size);
-        local_info.mr_desc = info.mr_desc;
-        local_info.rkey = info.rkey;
+      //   // Register mem
+      //   RegisterMemInfo local_info;
+      //   local_info.address =
+      //       reinterpret_cast<uint64_t>(buffers[i]->data()) + blob_data_offset;
+      //   local_info.size = std::min(remain_blob_bytes, max_register_size);
+      //   local_info.mr_desc = info.mr_desc;
+      //   local_info.rkey = info.rkey;
         // Status status;
         // while (true) {
         //   status = rdma_client_->RegisterMemory(local_info);
@@ -700,39 +707,54 @@ Status RPCClient::CreateRemoteBlobs(
         // }
 
         // Request mem info
-        RegisterMemInfo remote_info;
-        remote_info.address =
-            reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset;
-        remote_info.size = local_info.size;
-        remote_info.rkey = rkey;
-        // RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
-        size_t send_bytes = remote_info.size;
+        // RegisterMemInfo remote_info;
+        // remote_info.address =
+        //     reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset;
+        // remote_info.size = local_info.size;
+        // remote_info.rkey = rkey;
+        // // RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
+        // size_t send_bytes = remote_info.size;
 
-        // Write data
-        size_t remain_bytes = send_bytes;
-        while (remain_bytes > 0) {
-          auto start = std::chrono::high_resolution_clock::now();
-          size_t write_bytes =
-              std::min(remain_bytes, rdma_client_->GetMaxTransferBytes());
-          size_t write_data_offset = send_bytes - remain_bytes;
-          RETURN_ON_ERROR(rdma_client_->Write(
-              local_blob_data + blob_data_offset + write_data_offset,
-              write_bytes,
-              reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset +
-                  write_data_offset,
-              remote_info.rkey, local_info.mr_desc, nullptr));
-          RETURN_ON_ERROR(rdma_client_->GetTXCompletion(-1, nullptr));
-          auto end = std::chrono::high_resolution_clock::now();
-          auto duration =
-              std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-          LOG(INFO) << "Write data cost: " << duration.count() << " us";
-          remain_bytes -= write_bytes;
-        }
+        // // Write data
+        // size_t remain_bytes = send_bytes;
+        // while (remain_bytes > 0) {
+          // auto start = std::chrono::high_resolution_clock::now();
+          // size_t write_bytes =
+          //     std::min(remain_bytes, rdma_client_->GetMaxTransferBytes());
+          // size_t write_data_offset = send_bytes - remain_bytes;
+          // RETURN_ON_ERROR(rdma_client_->Write(
+          //     local_blob_data + blob_data_offset + write_data_offset,
+          //     write_bytes,
+          //     reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset +
+          //         write_data_offset,
+          //     remote_info.rkey, local_info.mr_desc, nullptr));
+          // RETURN_ON_ERROR(rdma_client_->GetTXCompletion(-1, nullptr));
+          // auto end = std::chrono::high_resolution_clock::now();
+          // auto duration =
+          //     std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+          // LOG(INFO) << "Write data cost: " << duration.count() << " us";
 
-        remain_blob_bytes -= send_bytes;
+          // threads.push_back(std::thread([this, &local_blob_data, &blob_data_offset, &write_data_offset,
+          //                                 &write_bytes, &remote_blob_data, &blob_data_offset, &write_data_offset,
+          //                                 &remote_info, &local_info](){
+          //   RETURN_ON_ERROR(rdma_client_->Write(
+          //       local_blob_data + blob_data_offset + write_data_offset,
+          //       write_bytes,
+          //       reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset +
+          //           write_data_offset,
+          //       remote_info.rkey, local_info.mr_desc, nullptr));
+          //   RETURN_ON_ERROR(rdma_client_->GetTXCompletion(-1, nullptr));
+          // }));
+        //   remain_bytes -= write_bytes;
+        // }
+
+        // remain_blob_bytes -= send_bytes;
         // RETURN_ON_ERROR(rdma_client_->DeregisterMemory(local_info));
         // RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
-      } while (remain_blob_bytes > 0);
+      // } while (remain_blob_bytes > 0);
+    }
+    for (auto& thread : threads) {
+      thread.join();
     }
 #endif
   } else {
