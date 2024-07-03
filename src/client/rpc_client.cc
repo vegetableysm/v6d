@@ -37,6 +37,7 @@ limitations under the License.
 #include "common/util/logging.h"
 #include "common/util/protocols.h"
 #include "common/util/version.h"
+#include "client/thread_group.h"
 
 namespace vineyard {
 
@@ -661,17 +662,34 @@ Status RPCClient::CreateRemoteBlobs(
   // send the actual payload
   if (rdma_connected_) {
 #ifdef VINEYARD_WITH_RDMA
-    std::vector<std::thread> threads;
+
+    auto fn = [this, payloads, buffers] (int i) -> Status {
+      VINEYARD_CHECK_OK(this->rdma_client_->Write(
+        buffers[i]->data(), buffers[i]->size(),
+        reinterpret_cast<uint64_t>(payloads[i].pointer), rkey, info.mr_desc, nullptr));
+      VINEYARD_CHECK_OK(this->rdma_client_->GetTXCompletion(-1, nullptr));
+      return Status::OK();
+    };
+
+    std::vector<parallel1::ThreadGroup::tid_t> tids(payloads.size());
     for (size_t i = 0; i < payloads.size(); ++i) {
+      tids[i] = group.AddTask(fn, i);
+    }
+    std::vector<Status> taskResults(payloads.size(), Status::OK());
+    for (size_t i = 0; i < payloads.size(); ++i) {
+      taskResults[i] = group.TaskResult(tids[i]);
+    }
+
+    // for (size_t i = 0; i < payloads.size(); ++i) {
       // size_t remain_blob_bytes = buffers[i]->size();
       // char* local_blob_data = buffers[i]->data();
       // uint64_t max_register_size = buffers[i]->size();
-      threads.push_back(std::thread([this, &buffers, &payloads, i](){
-        VINEYARD_CHECK_OK(this->rdma_client_->Write(
-            buffers[i]->data(), buffers[i]->size(),
-            reinterpret_cast<uint64_t>(payloads[i].pointer), rkey, info.mr_desc, nullptr));
-        VINEYARD_CHECK_OK(this->rdma_client_->GetTXCompletion(-1, nullptr));
-      }));
+      // threads.push_back(std::thread([this, &buffers, &payloads, i](){
+        // VINEYARD_CHECK_OK(this->rdma_client_->Write(
+        //     buffers[i]->data(), buffers[i]->size(),
+        //     reinterpret_cast<uint64_t>(payloads[i].pointer), rkey, info.mr_desc, nullptr));
+        // VINEYARD_CHECK_OK(this->rdma_client_->GetTXCompletion(-1, nullptr));
+      // }));
 
       // do {
       //   size_t blob_data_offset = buffers[i]->size() - remain_blob_bytes;
@@ -752,10 +770,10 @@ Status RPCClient::CreateRemoteBlobs(
         // RETURN_ON_ERROR(rdma_client_->DeregisterMemory(local_info));
         // RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
       // } while (remain_blob_bytes > 0);
-    }
-    for (auto& thread : threads) {
-      thread.join();
-    }
+    // }
+    // for (auto& thread : threads) {
+    //   thread.join();
+    // }
 #endif
   } else {
     for (auto const& buffer : buffers) {

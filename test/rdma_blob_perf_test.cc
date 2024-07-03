@@ -30,7 +30,7 @@ limitations under the License.
 using namespace vineyard;  // NOLINT(build/namespaces)
 
 // constexpr uint64_t iterator = 10000;
-constexpr uint64_t total_mem = 1024UL * 1024 * 1088;
+constexpr uint64_t total_mem = 1024UL * 1024 * 1088; // 1G + 64M
 constexpr uint64_t warm_up = 1;
 
 void TestCreateBlob(RPCClient& client, std::vector<ObjectID> &warm_up_ids, std::vector<ObjectID> &ids, size_t size) {

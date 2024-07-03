@@ -21,8 +21,10 @@ limitations under the License.
 #include <set>
 #include <string>
 #include <vector>
+#include <thread>
 
 #include "client/client_base.h"
+#include "client/thread_group.h"
 #include "client/ds/i_object.h"
 #include "client/ds/object_meta.h"
 #include "client/ds/remote_blob.h"
@@ -448,6 +450,7 @@ class RPCClient final : public ClientBase {
 #ifdef VINEYARD_WITH_RDMA
   std::shared_ptr<RDMAClient> rdma_client_;
   RegisterMemInfo info;
+  parallel1::ThreadGroup group;
 #endif
   mutable bool rdma_connected_ = false;
   void *reserver_buffer = nullptr;
