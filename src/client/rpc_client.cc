@@ -117,7 +117,7 @@ Status RPCClient::Connect(const std::string& rpc_endpoint,
   std::string rdma_host = "", rdma_port = "-1";
   pos = rdma_endpoint.find(":");
   if (pos == std::string::npos) {
-    std::cout << "No RDMA endpoint provided. Fall back to TCP." << std::endl;
+    // std::cout << "No RDMA endpoint provided. Fall back to TCP." << std::endl;
   } else {
     rdma_host = rdma_endpoint.substr(0, pos);
     rdma_port = rdma_endpoint.substr(pos + 1);
@@ -190,8 +190,8 @@ Status RPCClient::Connect(const std::string& host, uint32_t port,
                 << ", RDMA server: " << rdma_host << ":" << rdma_port
                 << std::endl;
     } else {
-      std::cout << "Connect RDMA server failed! Fall back to RPC mode. Error:"
-                << status.message() << std::endl;
+      // std::cout << "Connect RDMA server failed! Fall back to RPC mode. Error:"
+      //           << status.message() << std::endl;
     }
   }
 
