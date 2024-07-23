@@ -42,9 +42,10 @@ void TestConnRDMA(int round, std::string rpc_endpoint, std::string rdma_endpoint
   if (parallel) {
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < round; i++) {
-      threads.push_back(std::thread([i, &clients, rpc_endpoint, rdma_endpoint]() {
+      threads.push_back(std::thread([i, &clients, &rpc_endpoint, &rdma_endpoint, &client_warm_up]() {
         auto client = clients[i];
-        client->Connect(rpc_endpoint, "", "", rdma_endpoint);
+        // client->Connect(rpc_endpoint, "", "", rdma_endpoint);
+        client_warm_up.Fork(*clients[i]);
       }));
     }
     for (int i = 0; i < round; i++) {
@@ -58,7 +59,8 @@ void TestConnRDMA(int round, std::string rpc_endpoint, std::string rdma_endpoint
     for (int i = 0; i < round; i++) {
       auto start = std::chrono::high_resolution_clock::now();
       auto client = clients[i];
-      client->Connect(rpc_endpoint, "", "", rdma_endpoint);
+      // client->Connect(rpc_endpoint, "", "", rdma_endpoint);
+      client_warm_up.Fork(*clients[i]);
       auto end = std::chrono::high_resolution_clock::now();
       LOG(INFO) << "RDMA connection time: "
                 << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
@@ -74,12 +76,15 @@ void TestConnTCP(int round, std::string rpc_endpoint) {
     auto client = std::make_shared<RPCClient>();
     clients.push_back(client);
   }
+  RPCClient client_warm_up;
+  client_warm_up.Connect(rpc_endpoint);
   if (parallel) {
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < round; i++) {
-      threads.push_back(std::thread([i, &clients, rpc_endpoint]() {
+      threads.push_back(std::thread([i, &clients, rpc_endpoint, &client_warm_up]() {
         auto client = clients[i];
-        client->Connect(rpc_endpoint);
+        // client->Connect(rpc_endpoint);
+        client_warm_up.Fork(*clients[i]);
       }));
     }
     for (int i = 0; i < round; i++) {
@@ -93,7 +98,8 @@ void TestConnTCP(int round, std::string rpc_endpoint) {
     for (int i = 0; i < round; i++) {
       auto start = std::chrono::high_resolution_clock::now();
       auto client = clients[i];
-      client->Connect(rpc_endpoint);
+      // client->Connect(rpc_endpoint);
+      client_warm_up.Fork(*clients[i]);
       auto end = std::chrono::high_resolution_clock::now();
       LOG(INFO) << "TCP connection time: "
                 << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
@@ -104,8 +110,8 @@ void TestConnTCP(int round, std::string rpc_endpoint) {
 }
 
 void TestConnect(int round, std::string rpc_endpoint, std::string rdma_endpoint) {
-  TestConnRDMA(round, rpc_endpoint, rdma_endpoint);
   TestConnTCP(round, rpc_endpoint);
+  TestConnRDMA(round, rpc_endpoint, rdma_endpoint);
 }
 
 int main(int argc, char** argv) {
