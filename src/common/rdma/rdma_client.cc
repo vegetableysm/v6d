@@ -20,7 +20,6 @@ limitations under the License.
 #include "common/rdma/rdma_client.h"
 #include "common/rdma/util.h"
 #include "common/util/status.h"
-#include "common/util/logging.h"
 #if defined(__linux__)
 #include "libfabric/include/rdma/fabric.h"
 #include "libfabric/include/rdma/fi_cm.h"
@@ -46,15 +45,9 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
 
   fi_eq_attr eq_attr = {0};
   eq_attr.wait_obj = FI_WAIT_UNSPEC;
-  auto start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(!fi_eq_open(ptr->fabric, &eq_attr, &ptr->eq, NULL),
               "fi_eq_open failed.");
-  auto end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_eq_open: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   fi_cq_attr cq_attr = {0};
   memset(&cq_attr, 0, sizeof cq_attr);
   cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -67,20 +60,10 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
   cq_attr.size = ptr->fi->tx_attr->size;
   CHECK_ERROR(!fi_cq_open(ptr->domain, &cq_attr, &ptr->txcq, NULL),
               "fi_cq_open failed.");
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_cq_open: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(!fi_endpoint(ptr->domain, ptr->fi, &ptr->ep, NULL),
               "fi_endpoint failed.");
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_endpoint: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(!fi_ep_bind(ptr->ep, &ptr->eq->fid, 0), "fi_ep_bind eq failed.");
 
   CHECK_ERROR(!fi_ep_bind(ptr->ep, &ptr->rxcq->fid, FI_RECV),
@@ -88,19 +71,9 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
 
   CHECK_ERROR(!fi_ep_bind(ptr->ep, &ptr->txcq->fid, FI_SEND),
               "fi_ep_bind txcq failed.");
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_ep_bind: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(!fi_enable(ptr->ep), "fi_enable failed.");
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_enable: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   ptr->rx_msg_buffer = new char[ptr->fi->rx_attr->size];
   if (!ptr->rx_msg_buffer) {
     return Status::Invalid("Failed to allocate rx buffer.");
@@ -109,44 +82,25 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
   if (!ptr->tx_msg_buffer) {
     return Status::Invalid("Failed to allocate tx buffer.");
   }
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA allocate buffer: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   ptr->RegisterMemory(&(ptr->rx_mr), ptr->rx_msg_buffer, ptr->rx_msg_size,
                       ptr->rx_msg_key, ptr->rx_msg_mr_desc);
   ptr->RegisterMemory(&(ptr->tx_mr), ptr->tx_msg_buffer, ptr->tx_msg_size,
                       ptr->tx_msg_key, ptr->tx_msg_mr_desc);
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA RegisterMemory: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
   ptr->state = READY;
   return Status::OK();
 }
 
 Status RDMAClient::Connect() {
-  auto start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(!fi_connect(ep, fi->dest_addr, NULL, 0), "fi_connect failed.");
-  auto end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_connect: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
   fi_eq_cm_entry entry;
   uint32_t event;
 
-  start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(
       fi_eq_sread(eq, &event, &entry, sizeof(entry), -1, 0) == sizeof(entry),
       "fi_eq_sread failed.");
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_eq_sread: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
   if (event != FI_CONNECTED || entry.fid != &ep->fid) {
     return Status::Invalid("Unexpected event:" + std::to_string(event));
@@ -301,25 +255,13 @@ Status RDMAClientCreator::Create(std::shared_ptr<RDMAClient>& ptr,
   std::string server_endpoint = server_address + ":" + std::to_string(port);
   std::lock_guard<std::mutex> lock(servers_mtx_);
   if (servers_.find(server_endpoint) == servers_.end()) {
-    LOG(INFO) << "not find";
     RDMARemoteNodeInfo node_info;
-    auto start = std::chrono::high_resolution_clock::now();
     RETURN_ON_ERROR(CreateRDMARemoteNodeInfo(node_info, server_address, port));
-    auto end = std::chrono::high_resolution_clock::now();
-    LOG(INFO) << "RDMA CreateRDMARemoteNodeInfo: "
-              << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-              << "us";
-    start = std::chrono::high_resolution_clock::now();
     RETURN_ON_ERROR(RDMAClient::Make(ptr, node_info));
-    end = std::chrono::high_resolution_clock::now();
-    LOG(INFO) << "RDMA Make: "
-              << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-              << "us";
     node_info.refcnt++;
 
     servers_[server_endpoint] = node_info;
   } else {
-    LOG(INFO) << "find";
     RETURN_ON_ERROR(RDMAClient::Make(ptr, servers_[server_endpoint]));
     servers_[server_endpoint].refcnt++;
   }
@@ -334,51 +276,30 @@ Status RDMAClientCreator::CreateRDMARemoteNodeInfo(RDMARemoteNodeInfo& info,
     return Status::Invalid("Invalid fabric hints info.");
   }
 
-  auto start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(!fi_getinfo(VINEYARD_FIVERSION, server_address.c_str(),
                           std::to_string(port).c_str(), 0, hints,
                           reinterpret_cast<fi_info**>(&(info.fi))),
               "fi_getinfo failed")
-  auto end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_getinfo: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(!fi_fabric(reinterpret_cast<fi_info*>(info.fi)->fabric_attr,
                          reinterpret_cast<fid_fabric**>(&info.fabric), NULL),
               "fi_fabric failed.");
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_fabric: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(!fi_domain(reinterpret_cast<fid_fabric*>(info.fabric),
                          reinterpret_cast<fi_info*>(info.fi),
                          reinterpret_cast<fid_domain**>(&info.domain), NULL),
               "fi_domain failed.");
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_domain: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
   return Status::OK();
 }
 
 Status RDMAClientCreator::CreateRDMARemoteNodeInfo(RDMARemoteNodeInfo& info,
                                                    std::string server_address,
                                                    int port) {
-  auto start = std::chrono::high_resolution_clock::now();
   fi_info* hints = fi_allocinfo();
   if (!hints) {
     return Status::Invalid("Failed to allocate fabric info.");
   }
-  auto end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA fi_allocinfo: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   hints->caps =
       FI_MSG | FI_RMA | FI_WRITE | FI_REMOTE_WRITE | FI_READ | FI_REMOTE_READ;
   hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
@@ -392,24 +313,9 @@ Status RDMAClientCreator::CreateRDMARemoteNodeInfo(RDMARemoteNodeInfo& info,
   hints->fabric_attr = new fi_fabric_attr;
   memset(hints->fabric_attr, 0, sizeof *(hints->fabric_attr));
   hints->fabric_attr->prov_name = strdup("verbs");
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA set field: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
 
-  start = std::chrono::high_resolution_clock::now();
   RETURN_ON_ERROR(CreateRDMARemoteNodeInfo(info, hints, server_address, port));
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA CreateRDMARemoteNodeInfo internal: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
-
-  start = std::chrono::high_resolution_clock::now();
   IRDMA::FreeInfo(hints);
-  end = std::chrono::high_resolution_clock::now();
-  LOG(INFO) << "RDMA FreeInfo: "
-            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-            << "us";
   return Status::OK();
 }
 
