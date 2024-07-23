@@ -117,7 +117,7 @@ Status RPCClient::Connect(const std::string& rpc_endpoint,
   std::string rdma_host = "", rdma_port = "-1";
   pos = rdma_endpoint.find(":");
   if (pos == std::string::npos) {
-    std::cout << "No RDMA endpoint provided. Fall back to TCP." << std::endl;
+    // std::cout << "No RDMA endpoint provided. Fall back to TCP." << std::endl;
   } else {
     rdma_host = rdma_endpoint.substr(0, pos);
     rdma_port = rdma_endpoint.substr(pos + 1);
@@ -186,12 +186,12 @@ Status RPCClient::Connect(const std::string& host, uint32_t port,
     Status status = ConnectRDMA(rdma_host, rdma_port);
     if (status.ok()) {
       rdma_endpoint_ = rdma_host + ":" + std::to_string(rdma_port);
-      std::cout << "Connected to RPC server: " << rpc_endpoint
-                << ", RDMA server: " << rdma_host << ":" << rdma_port
-                << std::endl;
+      // std::cout << "Connected to RPC server: " << rpc_endpoint
+      //           << ", RDMA server: " << rdma_host << ":" << rdma_port
+      //           << std::endl;
     } else {
-      std::cout << "Connect RDMA server failed! Fall back to RPC mode. Error:"
-                << status.message() << std::endl;
+      // std::cout << "Connect RDMA server failed! Fall back to RPC mode. Error:"
+      //           << status.message() << std::endl;
     }
   }
 
@@ -204,9 +204,16 @@ Status RPCClient::ConnectRDMA(const std::string& rdma_host,
     return Status::OK();
   }
 
+  auto start = std::chrono::high_resolution_clock::now();
   RETURN_ON_ERROR(RDMAClientCreator::Create(this->rdma_client_, rdma_host,
                                             static_cast<int>(rdma_port)));
+  auto end = std::chrono::high_resolution_clock::now();
+  std::cout << "Create RDMA client time: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+                   .count()
+            << "us" << std::endl;
 
+  start = std::chrono::high_resolution_clock::now();
   int retry = 0;
   do {
     if (this->rdma_client_->Connect().ok()) {
@@ -220,6 +227,11 @@ Status RPCClient::ConnectRDMA(const std::string& rdma_host,
     std::cout << "Connect rdma server failed! retry: " << retry << " times."
               << std::endl;
   } while (true);
+  end = std::chrono::high_resolution_clock::now();
+  std::cout << "Connect RDMA server time: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+                   .count()
+            << "us" << std::endl;
   this->rdma_connected_ = true;
   return Status::OK();
 }
