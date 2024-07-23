@@ -129,14 +129,24 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
 }
 
 Status RDMAClient::Connect() {
+  auto start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(!fi_connect(ep, fi->dest_addr, NULL, 0), "fi_connect failed.");
+  auto end = std::chrono::high_resolution_clock::now();
+  LOG(INFO) << "RDMA fi_connect: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
+            << "us";
 
   fi_eq_cm_entry entry;
   uint32_t event;
 
+  start = std::chrono::high_resolution_clock::now();
   CHECK_ERROR(
       fi_eq_sread(eq, &event, &entry, sizeof(entry), -1, 0) == sizeof(entry),
       "fi_eq_sread failed.");
+  end = std::chrono::high_resolution_clock::now();
+  LOG(INFO) << "RDMA fi_eq_sread: "
+            << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
+            << "us";
 
   if (event != FI_CONNECTED || entry.fid != &ep->fid) {
     return Status::Invalid("Unexpected event:" + std::to_string(event));
