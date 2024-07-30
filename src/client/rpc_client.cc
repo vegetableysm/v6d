@@ -674,7 +674,13 @@ Status RPCClient::TransferRemoteBlobWithRDMA(std::shared_ptr<Buffer> buffer,
     local_info.size = std::min(remain_blob_bytes, max_register_size);
     Status status;
     while (true) {
+      auto start = std::chrono::steady_clock::now();
       status = rdma_client_->RegisterMemory(local_info);
+      auto end = std::chrono::steady_clock::now();
+      auto duration =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      std::cout << "RegisterMemory duration: " << duration.count() << "us"
+                << std::endl;
       if (status.ok()) {
         break;
       }
@@ -703,7 +709,13 @@ Status RPCClient::TransferRemoteBlobWithRDMA(std::shared_ptr<Buffer> buffer,
       remote_info.address =
           reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset;
       remote_info.size = local_info.size;
+      auto start = std::chrono::steady_clock::now();
       RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
+      auto end = std::chrono::steady_clock::now();
+      auto duration =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      std::cout << "RequestMemInfo duration: " << duration.count() << "us"
+                << std::endl;
       if (remote_info.size > 0) {
         break;
       }
@@ -719,17 +731,28 @@ Status RPCClient::TransferRemoteBlobWithRDMA(std::shared_ptr<Buffer> buffer,
       size_t read_bytes =
           std::min(remain_bytes, rdma_client_->GetMaxTransferBytes());
       size_t read_data_offset = transfer_bytes - remain_bytes;
+      auto start = std::chrono::steady_clock::now();
       RETURN_ON_ERROR(rdma_opt(
           local_blob_data + blob_data_offset + read_data_offset, read_bytes,
           reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset +
               read_data_offset,
           remote_info.rkey, local_info.mr_desc, nullptr));
       RETURN_ON_ERROR(rdma_client_->GetTXCompletion(-1, nullptr));
+      auto end = std::chrono::steady_clock::now();
+      auto duration =
+          std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+      std::cout << "RDMA opt use: " << duration.count() << "us" << std::endl;
       remain_bytes -= read_bytes;
     }
 
     remain_blob_bytes -= transfer_bytes;
+    auto start = std::chrono::steady_clock::now();
     RETURN_ON_ERROR(rdma_client_->DeregisterMemory(local_info));
+    auto end = std::chrono::steady_clock::now();
+    auto duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << "DeregisterMemory duration: " << duration.count() << "us"
+              << std::endl;
     RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
   } while (remain_blob_bytes > 0);
   return Status::OK();
@@ -889,8 +912,14 @@ Status RPCClient::GetRemoteBlobs(
   std::unordered_map<ObjectID, std::shared_ptr<RemoteBlob>> id_payload_map;
   if (rdma_connected_) {
     for (auto const& payload : payloads) {
+      auto start = std::chrono::high_resolution_clock::now();
       auto remote_blob = std::shared_ptr<RemoteBlob>(new RemoteBlob(
           payload.object_id, remote_instance_id_, payload.data_size));
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+          end - start);
+      std::cout << "Allocate buffer use : " << duration.count() << "us"
+                << std::endl;
       RDMAClient::rdma_opt_t opt_func = std::bind(
           &RDMAClient::Read, rdma_client_, std::placeholders::_1,
           std::placeholders::_2, std::placeholders::_3, std::placeholders::_4,

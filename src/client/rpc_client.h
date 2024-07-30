@@ -477,11 +477,19 @@ class RPCClient final : public ClientBase {
     std::unordered_set<ObjectID> id_set_;
   };
 
+  void* getBuffer(size_t size) {
+    void* result = buffer + offset;
+    offset += size;
+    return result;
+  }
+
   InstanceID remote_instance_id_;
 
   std::string rdma_endpoint_;
   std::shared_ptr<RDMAClient> rdma_client_;
   mutable bool rdma_connected_ = false;
+  void *buffer;
+  size_t offset = 0;
 
   friend class Client;
 };

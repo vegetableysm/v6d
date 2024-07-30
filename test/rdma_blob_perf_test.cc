@@ -29,7 +29,7 @@ limitations under the License.
 
 using namespace vineyard;  // NOLINT(build/namespaces)
 
-constexpr uint64_t total_mem = 1024UL * 1024 * 1024;
+uint64_t total_mem = 1024UL * 1024 * 16;
 
 void PrepareData(std::vector<std::vector<std::shared_ptr<RemoteBlobWriter>>>&
                      remote_blob_writers_list,
@@ -153,18 +153,20 @@ void CheckBlobValue(
 
 // Test 512K~512M blob
 int main(int argc, const char** argv) {
-  if (argc < 7) {
+  if (argc < 8) {
     LOG(ERROR) << "usage: " << argv[0] << " <ipc_socket>"
                << " <rpc_endpoint>"
                << " <rdma_endpoint>"
                << " <min_size>"
                << " <max_size>"
-               << " <parallel>";
+               << " <parallel>"
+               << " <total_mem>";
     return -1;
   }
   std::string ipc_socket = std::string(argv[1]);
   std::string rpc_endpoint = std::string(argv[2]);
   std::string rdma_endpoint = std::string(argv[3]);
+  total_mem = std::stoull(argv[7]) * 1024 * 1024;
   int parallel = std::stoi(argv[6]);
   std::vector<std::shared_ptr<RPCClient>> clients;
   for (int i = 0; i < parallel; i++) {
@@ -174,13 +176,13 @@ int main(int argc, const char** argv) {
 
   uint64_t min_size = 1024 * 1024 * 2;  // 512K
   uint64_t max_size = 1024 * 1024 * 2;  // 64M
-  min_size = std::stoull(argv[4]) * 1024 * 1024;
-  max_size = std::stoull(argv[5]) * 1024 * 1024;
+  min_size = std::stoull(argv[4]) * 1024;
+  max_size = std::stoull(argv[5]) * 1024;
   if (min_size == 0) {
-    min_size = 1024 * 512;
+    min_size = 512;
   }
   if (max_size == 0) {
-    max_size = 1024 * 512;
+    max_size = 512;
   }
   std::vector<std::vector<std::vector<ObjectID>>> blob_ids_lists;
   std::vector<size_t> sizes;
