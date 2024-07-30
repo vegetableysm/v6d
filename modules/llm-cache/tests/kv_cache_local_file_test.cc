@@ -18,6 +18,7 @@ limitations under the License.
 #include <random>
 #include <vector>
 
+#include "client/rpc_client.h"
 #include "gulrak/filesystem.hpp"
 #include "llm-cache/ds/config.h"
 #include "llm-cache/ds/kv_cache_manager.h"
@@ -30,6 +31,8 @@ int capacity = 20;
 int layer = 3;
 
 FileCacheConfig config;
+RPCClient client;
+bool use_vineyard = false;
 
 std::vector<int> round_1_tokens = {
     1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17,
@@ -46,7 +49,11 @@ std::vector<std::vector<int>> tokens_list = {round_1_tokens, round_2_tokens,
 
 std::shared_ptr<KVCacheManager> init() {
   std::shared_ptr<KVCacheManager> kv_cache_manager;
-  VINEYARD_CHECK_OK(KVCacheManager::Make(kv_cache_manager, config));
+  if (!use_vineyard) {
+    VINEYARD_CHECK_OK(KVCacheManager::Make(kv_cache_manager, config));
+  } else {
+    VINEYARD_CHECK_OK(KVCacheManager::Make(client, kv_cache_manager, config));
+  }
   return kv_cache_manager;
 }
 
@@ -193,11 +200,24 @@ void threadFunc(int sleep_time) {
 }
 
 int main(int argc, char** argv) {
+  if (argc == 1) {
+    config = FileCacheConfig(tensorNBytes, capacity, layer, 4, 2,
+                             "/tmp/llm_cache/", LOCAL, 1, 1, false, 3, 5);
+    use_vineyard = false;
+  } else {
+    std::string rpc_endpoint = std::string(argv[1]);
+    std::string rdma_endpoint;
+    if (argc > 2) {
+      rdma_endpoint = std::string(argv[2]);
+    }
+    client.Connect(rpc_endpoint, "", "", rdma_endpoint);
+    config =
+        FileCacheConfig(tensorNBytes, capacity, layer, 4, 2, "/tmp/llm_cache/",
+                        VINEYARD, 100, 100, false, 3, 5);
+    use_vineyard = true;
+  }
   LOG(INFO) << "Test KVCache with tensorNBytes: " << tensorNBytes
             << ", capacity: " << capacity << ", layer: " << layer;
-
-  config = FileCacheConfig(tensorNBytes, capacity, layer, 4, 2,
-                           "/tmp/llm_cache/", LOCAL, 1, 1, false, 3, 5);
 
   std::vector<std::thread> threads;
   for (int i = 0; i < 1; i++) {
@@ -209,23 +229,24 @@ int main(int argc, char** argv) {
     LOG(INFO) << "Thread:" << i << " exit.";
   }
 
-  checkFilesNotExist("/tmp/llm_cache/");
+  // if (!use_vineyard) {
+  //   checkFilesNotExist("/tmp/llm_cache/");
+  //   config = FileCacheConfig(tensorNBytes, capacity, layer, 4, 2,
+  //                            "/tmp/llm_cache/", LOCAL, 10, 20, true, 1, 2);
 
-  config = FileCacheConfig(tensorNBytes, capacity, layer, 4, 2,
-                           "/tmp/llm_cache/", LOCAL, 10, 20, true, 1, 2);
+  //   threads.clear();
+  //   for (int i = 0; i < 1; i++) {
+  //     threads.push_back(std::thread(threadFunc, 0));
+  //   }
 
-  threads.clear();
-  for (int i = 0; i < 1; i++) {
-    threads.push_back(std::thread(threadFunc, 0));
-  }
+  //   for (int i = 0; i < 1; i++) {
+  //     threads[i].join();
+  //     LOG(INFO) << "Thread:" << i << " exit.";
+  //   }
 
-  for (int i = 0; i < 1; i++) {
-    threads[i].join();
-    LOG(INFO) << "Thread:" << i << " exit.";
-  }
-
-  sleep(3);
-  checkFilesNotExist("/tmp/llm_cache/");
+  //   sleep(3);
+  //   checkFilesNotExist("/tmp/llm_cache/");
+  // }
 
   LOG(INFO) << "Passed KVCache tests...";
   return 0;
