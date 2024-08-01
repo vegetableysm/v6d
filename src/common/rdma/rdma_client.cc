@@ -81,8 +81,6 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
   }
   ptr->tx_msg_buffer = new char[ptr->fi->rx_attr->size * sizeof(VineyardMsg)];
   ptr->tx_msg_size = ptr->fi->tx_attr->size * sizeof(VineyardMsg);
-  std::cout << "bufer size:" << ptr->rx_msg_size << " " << ptr->tx_msg_size
-            << std::endl;
   if (!ptr->tx_msg_buffer) {
     return Status::Invalid("Failed to allocate tx buffer.");
   }
@@ -115,7 +113,7 @@ Status RDMAClient::Connect() {
 
 Status RDMAClient::GetRXCompletion(int timeout, void** context) {
   while (true) {
-    int ret = this->GetCompletion(rxcq, timeout == -1 ? 500 : timeout, context);
+    int ret = this->GetCompletion(rxcq, timeout == -1 ? -1 : timeout, context);
     if (ret == -FI_ETIMEDOUT) {
       if (timeout > 0) {
         return Status::Invalid("GetRXCompletion timeout");
@@ -135,7 +133,7 @@ Status RDMAClient::GetRXCompletion(int timeout, void** context) {
 
 Status RDMAClient::GetTXCompletion(int timeout, void** context) {
   while (true) {
-    int ret = this->GetCompletion(txcq, timeout == -1 ? 500 : timeout, context);
+    int ret = this->GetCompletion(txcq, timeout == -1 ? -1 : timeout, context);
     if (ret == -FI_ETIMEDOUT) {
       if (timeout > 0) {
         return Status::Invalid("GetTXCompletion timeout");
@@ -159,13 +157,13 @@ Status RDMAClient::SendMemInfoToServer(void* buffer, uint64_t size) {
 }
 
 Status RDMAClient::GetTXFreeMsgBuffer(void*& buffer) {
-  buffer = tx_msg_buffer + (tx_index % 1000) * sizeof(VineyardMsg);
+  buffer = tx_msg_buffer + (tx_index % 6000) * sizeof(VineyardMsg);
   tx_index++;
   return Status::OK();
 }
 
 Status RDMAClient::GetRXFreeMsgBuffer(void*& buffer) {
-  buffer = rx_msg_buffer + (rx_index % 1000) * sizeof(VineyardMsg);
+  buffer = rx_msg_buffer + (rx_index % 6000) * sizeof(VineyardMsg);
   rx_index++;
   return Status::OK();
 }
@@ -319,8 +317,8 @@ Status RDMAClientCreator::CreateRDMARemoteNodeInfo(RDMARemoteNodeInfo& info,
   hints->fabric_attr = new fi_fabric_attr;
   memset(hints->fabric_attr, 0, sizeof *(hints->fabric_attr));
   hints->fabric_attr->prov_name = strdup("verbs");
-  hints->tx_attr->size = 1000;  // receive buffer size
-  hints->rx_attr->size = 1000;  // transmit buffer size
+  hints->tx_attr->size = 6000;  // receive buffer size
+  hints->rx_attr->size = 6000;  // transmit buffer size
 
   RETURN_ON_ERROR(CreateRDMARemoteNodeInfo(info, hints, server_address, port));
   IRDMA::FreeInfo(hints);

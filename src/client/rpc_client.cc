@@ -248,8 +248,6 @@ Status RPCClient::RDMARequestMemInfo(RegisterMemInfo& remote_info) {
   RETURN_ON_ERROR(this->rdma_client_->GetRXFreeMsgBuffer(remoteMsg));
   memset(remoteMsg, 0, sizeof(VineyardMsg));
 
-  VINEYARD_CHECK_OK(
-      this->rdma_client_->Recv(remoteMsg, sizeof(VineyardMsg), nullptr));
   RETURN_ON_ERROR(
       this->rdma_client_->Send(buffer, sizeof(VineyardMsg), nullptr));
 
@@ -261,6 +259,8 @@ Status RPCClient::RDMARequestMemInfo(RegisterMemInfo& remote_info) {
   if (duration_.count() > 1000) {
     std::cout << "Get tx use: " << duration_.count() << "us" << std::endl;
   }
+  VINEYARD_CHECK_OK(
+      this->rdma_client_->Recv(remoteMsg, sizeof(VineyardMsg), nullptr));
   auto start__ = std::chrono::high_resolution_clock::now();
   VINEYARD_CHECK_OK(rdma_client_->GetRXCompletion(-1, nullptr));
   auto end__ = std::chrono::high_resolution_clock::now();
@@ -772,6 +772,7 @@ Status RPCClient::TransferRemoteBlobWithCachedRDMABuffer(
     size_t blob_data_offset = buffer->size() - remain_blob_bytes;
     void* remote_blob_data = payload.pointer;
     size_t transfer_bytes = 0;
+    // usleep(50);
 
     // Request mem info
     RegisterMemInfo remote_info;

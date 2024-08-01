@@ -51,8 +51,8 @@ Status RDMAServer::Make(std::shared_ptr<RDMAServer>& ptr, int port) {
   hints->fabric_attr = new fi_fabric_attr;
   memset(hints->fabric_attr, 0, sizeof *(hints->fabric_attr));
   hints->fabric_attr->prov_name = strdup("verbs");
-  hints->rx_attr->size = 2000; //std::thread::hardware_concurrency();
-  hints->tx_attr->size = 2000; //std::thread::hardware_concurrency();
+  hints->rx_attr->size = 8000; //std::thread::hardware_concurrency();
+  hints->tx_attr->size = 8000; //std::thread::hardware_concurrency();
 
   return Make(ptr, hints, port);
 }
