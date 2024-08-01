@@ -74,11 +74,15 @@ Status RDMAClient::Make(std::shared_ptr<RDMAClient>& ptr,
 
   CHECK_ERROR(!fi_enable(ptr->ep), "fi_enable failed.");
 
-  ptr->rx_msg_buffer = new char[ptr->fi->rx_attr->size];
+  ptr->rx_msg_buffer = new char[ptr->fi->rx_attr->size * sizeof(VineyardMsg)];
+  ptr->rx_msg_size = ptr->fi->rx_attr->size * sizeof(VineyardMsg);
   if (!ptr->rx_msg_buffer) {
     return Status::Invalid("Failed to allocate rx buffer.");
   }
-  ptr->tx_msg_buffer = new char[ptr->fi->tx_attr->size];
+  ptr->tx_msg_buffer = new char[ptr->fi->rx_attr->size * sizeof(VineyardMsg)];
+  ptr->tx_msg_size = ptr->fi->tx_attr->size * sizeof(VineyardMsg);
+  std::cout << "bufer size:" << ptr->rx_msg_size << " " << ptr->tx_msg_size
+            << std::endl;
   if (!ptr->tx_msg_buffer) {
     return Status::Invalid("Failed to allocate tx buffer.");
   }
@@ -155,12 +159,14 @@ Status RDMAClient::SendMemInfoToServer(void* buffer, uint64_t size) {
 }
 
 Status RDMAClient::GetTXFreeMsgBuffer(void*& buffer) {
-  buffer = tx_msg_buffer;
+  buffer = tx_msg_buffer + (tx_index % 1000) * sizeof(VineyardMsg);
+  tx_index++;
   return Status::OK();
 }
 
 Status RDMAClient::GetRXFreeMsgBuffer(void*& buffer) {
-  buffer = rx_msg_buffer;
+  buffer = rx_msg_buffer + (rx_index % 1000) * sizeof(VineyardMsg);
+  rx_index++;
   return Status::OK();
 }
 
@@ -313,6 +319,8 @@ Status RDMAClientCreator::CreateRDMARemoteNodeInfo(RDMARemoteNodeInfo& info,
   hints->fabric_attr = new fi_fabric_attr;
   memset(hints->fabric_attr, 0, sizeof *(hints->fabric_attr));
   hints->fabric_attr->prov_name = strdup("verbs");
+  hints->tx_attr->size = 1000;  // receive buffer size
+  hints->rx_attr->size = 1000;  // transmit buffer size
 
   RETURN_ON_ERROR(CreateRDMARemoteNodeInfo(info, hints, server_address, port));
   IRDMA::FreeInfo(hints);

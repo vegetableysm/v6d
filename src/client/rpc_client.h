@@ -24,6 +24,7 @@ limitations under the License.
 #include <vector>
 
 #include "client/client_base.h"
+#include "client/ds/blob.h"
 #include "client/ds/i_object.h"
 #include "client/ds/object_meta.h"
 #include "client/ds/remote_blob.h"
@@ -37,8 +38,9 @@ namespace vineyard {
 
 class Blob;
 class BlobWriter;
-
-class RPCClient final : public ClientBase {
+class RDMAFixedCachedBuffer;
+class RPCClient final : public ClientBase,
+                        public std::enable_shared_from_this<RPCClient> {
  public:
   ~RPCClient() override;
 
@@ -376,7 +378,7 @@ class RPCClient final : public ClientBase {
                        std::shared_ptr<RemoteBlob>& buffer);
 
   Status GetRemoteBlob(const ObjectID& id, const bool unsafe,
-                       std::shared_ptr<MutableBuffer>& buffer);
+                       std::shared_ptr<RDMAFixedCachedBuffer>& buffer);
 
   /**
    * @brief Get the remote blobs of the connected vineyard server, using the RPC
@@ -400,8 +402,9 @@ class RPCClient final : public ClientBase {
   Status GetRemoteBlobs(std::vector<ObjectID> const& ids, const bool unsafe,
                         std::vector<std::shared_ptr<RemoteBlob>>& remote_blobs);
 
-  Status GetRemoteBlobs(std::vector<ObjectID> const& ids, const bool unsafe,
-                        std::vector<std::shared_ptr<MutableBuffer>>& buffers);
+  Status GetRemoteBlobs(
+      std::vector<ObjectID> const& ids, const bool unsafe,
+      std::vector<std::shared_ptr<RDMAFixedCachedBuffer>>& buffers);
 
   Status GetRemoteBlobs(
       std::set<ObjectID> const& ids, const bool unsafe,
@@ -438,6 +441,9 @@ class RPCClient final : public ClientBase {
    */
   const std::string rdma_endpoint() { return rdma_endpoint_; }
 
+  Status MakeRDMAFixedCachedBuffer(
+      size_t size, std::shared_ptr<RDMAFixedCachedBuffer>& buffer);
+
  private:
   Status ConnectRDMA(const std::string& rdma_host, uint32_t rdma_port);
 
@@ -450,6 +456,11 @@ class RPCClient final : public ClientBase {
   Status TransferRemoteBlobWithRDMA(std::shared_ptr<Buffer> buffer,
                                     const Payload& payload,
                                     RDMAClient::rdma_opt_t rdma_opt);
+
+  Status TransferRemoteBlobWithCachedRDMABuffer(
+      std::shared_ptr<RDMAFixedCachedBuffer> buffer, const Payload& payload,
+      RDMAClient::rdma_opt_t rdma_opt);
+
   Status doReleaseBlobsWithRDMARequest(std::unordered_set<ObjectID> id_set);
 
   class RDMABlobScopeGuard {
@@ -482,8 +493,61 @@ class RPCClient final : public ClientBase {
   std::string rdma_endpoint_;
   std::shared_ptr<RDMAClient> rdma_client_;
   mutable bool rdma_connected_ = false;
+  std::vector<std::shared_ptr<RDMAFixedCachedBuffer>> fixed_cached_buffers_;
 
   friend class Client;
+  friend class RDMAFixedCachedBuffer;
+};
+
+class RDMAFixedCachedBuffer : public MutableBuffer {
+ public:
+  RDMAFixedCachedBuffer(std::shared_ptr<RPCClient>& client, void* buffer,
+                        size_t size)
+      : MutableBuffer(reinterpret_cast<uint8_t*>(buffer), size) {
+    rpc_client_ = client;
+  }
+
+  static Status Make(std::shared_ptr<RPCClient>& client, size_t size,
+                     std::shared_ptr<RDMAFixedCachedBuffer>& buffer) {
+    void* buffer_ptr = malloc(size);
+    if (buffer_ptr == nullptr) {
+      return Status::Invalid("Failed to allocate memory.");
+    }
+    buffer = std::make_shared<RDMAFixedCachedBuffer>(client, buffer_ptr, size);
+    buffer->info_.address = reinterpret_cast<uint64_t>(buffer_ptr);
+    buffer->info_.size = size;
+    if (!client->rdma_client_->RegisterMemory(buffer->info_).ok()) {
+      buffer.reset();
+      return Status::Invalid("Failed to register memory.");
+    }
+    buffer->registered = true;
+
+    return Status::OK();
+  }
+
+  ~RDMAFixedCachedBuffer() { Release(); }
+
+  Status Release() {
+    if (registered) {
+      auto status = rpc_client_->rdma_client_->DeregisterMemory(info_);
+      if (!status.ok()) {
+        return status;
+      }
+      registered = false;
+    }
+    if (info_.address != 0) {
+      free(reinterpret_cast<void*>(info_.address));
+      info_.address = 0;
+    }
+    return Status::OK();
+  }
+
+ private:
+  std::shared_ptr<RPCClient> rpc_client_;
+  RegisterMemInfo info_;
+  bool registered = false;
+
+  friend class RPCClient;
 };
 
 }  // namespace vineyard

@@ -108,10 +108,13 @@ class RDMAServer : public IRDMA {
     return Status::OK();
   }
 
-  int FindEmptySlot(uint64_t* bitmaps, int bitmap_num) {
+  int FindEmptySlot(uint64_t* bitmaps, int bitmap_num, int total_bit) {
     for (int i = 0; i < bitmap_num; i++) {
       if (bitmaps[i] != 0) {
         int index = ffsll(bitmaps[i]) - 1;
+        if (i * 64 + index > total_bit) {
+          return -1;
+        }
         bitmaps[i] &= ~(1 << index);
         return i * 64 + index;
       }
@@ -136,7 +139,7 @@ class RDMAServer : public IRDMA {
   char *rx_msg_buffer, *tx_msg_buffer;
   uint64_t *rx_buffer_bitmaps, *tx_buffer_bitmaps;
   int rx_bitmap_num = 0, tx_bitmap_num = 0;
-  uint64_t rx_msg_size = 8192, tx_msg_size = 8192;
+  uint64_t rx_msg_buffer_size, tx_msg_buffer_size;
 
   uint64_t rx_msg_key = 0, tx_msg_key = 0;
   void *rx_msg_mr_desc = NULL, *tx_msg_mr_desc = NULL;

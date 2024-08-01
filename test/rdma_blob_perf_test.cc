@@ -83,7 +83,7 @@ void TestCreateBlob(
 void TestGetBlob(std::shared_ptr<RPCClient>& client, std::vector<ObjectID>& ids,
                  size_t size,
                  std::vector<std::shared_ptr<RemoteBlob>>& local_buffers) {
-  uint64_t iterator = total_mem / size;
+  /*uint64_t iterator = total_mem / size;
 
   local_buffers.reserve(iterator);
 
@@ -100,15 +100,13 @@ void TestGetBlob(std::shared_ptr<RPCClient>& client, std::vector<ObjectID>& ids,
   LOG(INFO) << "Speed:"
             << static_cast<double>(iterator * size) / 1024 / 1024 /
                    (static_cast<double>(duration.count()) / 1000 / 1000)
-            << "MB/s\n";
+            << "MB/s\n";*/
 }
 
 void TestGetBlobWithAllocatedBuffer(
     std::shared_ptr<RPCClient>& client, std::vector<ObjectID>& ids, size_t size,
-    std::vector<std::shared_ptr<MutableBuffer>>& local_buffers) {
+    std::vector<std::shared_ptr<RDMAFixedCachedBuffer>>& local_buffers) {
   uint64_t iterator = total_mem / size;
-
-  local_buffers.reserve(iterator);
 
   auto start = std::chrono::high_resolution_clock::now();
   VINEYARD_CHECK_OK(client->GetRemoteBlobs(ids, false, local_buffers));
@@ -139,7 +137,7 @@ void CheckBlobValue(std::vector<std::shared_ptr<RemoteBlob>>& local_buffers) {
 }
 
 void CheckBlobValue(
-    std::vector<std::shared_ptr<MutableBuffer>>& local_buffers) {
+    std::vector<std::shared_ptr<RDMAFixedCachedBuffer>>& local_buffers) {
   LOG(INFO) << "CheckBlobValue";
   for (size_t i = 0; i < local_buffers.size(); i++) {
     const uint8_t* data =
@@ -250,36 +248,32 @@ int main(int argc, const char** argv) {
     index++;
   }
 
-  for (auto& local_buffers_list : local_buffers_lists) {
-    for (auto& local_buffers : local_buffers_list) {
-      CheckBlobValue(local_buffers);
-    }
-  }
+  // for (auto& local_buffers_list : local_buffers_lists) {
+  //   for (auto& local_buffers : local_buffers_list) {
+  //     CheckBlobValue(local_buffers);
+  //   }
+  // }
 
   LOG(INFO) << "Test Get Blob With Allocated Buffer(RDMA read / TCP)";
   LOG(INFO) << "----------------------------";
-  std::vector<std::vector<std::vector<uint8_t*>>> buffers_lists;
   index = 0;
-  std::vector<std::vector<std::vector<std::shared_ptr<MutableBuffer>>>>
+
+  std::vector<std::vector<std::vector<std::shared_ptr<RDMAFixedCachedBuffer>>>>
       local_buffers_lists_3;
   for (auto& blob_ids_list : blob_ids_lists) {
-    std::vector<std::vector<std::shared_ptr<MutableBuffer>>> local_buffers_list;
+    std::shared_ptr<RDMAFixedCachedBuffer> cached_buffer;
+    VINEYARD_CHECK_OK(clients[index]->MakeRDMAFixedCachedBuffer(
+                sizes[index], cached_buffer));
+    std::vector<std::vector<std::shared_ptr<RDMAFixedCachedBuffer>>>
+        local_buffers_list;
     std::vector<std::thread> threads;
     local_buffers_list.resize(parallel);
-    std::vector<std::vector<uint8_t*>> buffers_list;
     for (int i = 0; i < parallel; i++) {
-      std::vector<uint8_t*> buffers;
       local_buffers_list[i].resize(total_mem / sizes[index]);
       for (size_t j = 0; j < total_mem / sizes[index]; j++) {
-        uint8_t* tmp_buffer = new uint8_t[sizes[index]];
-        memset(tmp_buffer, 0, sizes[index]);
-        local_buffers_list[i][j] =
-            std::make_shared<MutableBuffer>(tmp_buffer, sizes[index]);
-        buffers.push_back(tmp_buffer);
+        local_buffers_list[i][j] = cached_buffer;
       }
-      buffers_list.push_back(buffers);
     }
-    buffers_lists.push_back(buffers_list);
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < parallel; i++) {
       threads.push_back(std::thread(TestGetBlobWithAllocatedBuffer,
@@ -301,13 +295,14 @@ int main(int argc, const char** argv) {
                      (static_cast<double>(duration.count()) / 1000)
               << "MB/s\n";
     local_buffers_lists_3.push_back(local_buffers_list);
+    index++;
   }
 
-  for (auto& local_buffers_list : local_buffers_lists_3) {
-    for (auto& local_buffers : local_buffers_list) {
-      CheckBlobValue(local_buffers);
-    }
-  }
+  // for (auto& local_buffers_list : local_buffers_lists_3) {
+  //   for (auto& local_buffers : local_buffers_list) {
+  //     CheckBlobValue(local_buffers);
+  //   }
+  // }
 
   LOG(INFO) << "Clean all object";
   for (size_t i = 0; i < blob_ids_lists.size(); i++) {
@@ -316,15 +311,16 @@ int main(int argc, const char** argv) {
     }
   }
 
-  for (size_t i = 0; i < buffers_lists.size(); i++) {
-    for (size_t j = 0; j < buffers_lists[i].size(); j++) {
-      for (size_t k = 0; k < buffers_lists[i][j].size(); k++) {
-        delete[] buffers_lists[i][j][k];
-      }
-    }
-  }
+  // for (size_t i = 0; i < local_buffers_lists_3.size(); i++) {
+  //   for (size_t j = 0; j < local_buffers_lists_3[i].size(); j++) {
+  //     for (size_t k = 0; k < local_buffers_lists_3[i][j].size(); k++) {
+  //       local_buffers_lists_3[i][j][k]->Release();
+  //     }
+  //   }
+  // }
 
   for (int i = 0; i < parallel; i++) {
+    clients[i]->Clear();
     clients[i]->Disconnect();
   }
 

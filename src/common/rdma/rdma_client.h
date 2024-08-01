@@ -96,6 +96,8 @@ class RDMAClient : public IRDMA {
   fid_mr *tx_mr = NULL, *rx_mr = NULL;
   std::vector<fid_mr*> mr_array;
   fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
+  int rx_index = 0;
+  int tx_index = 0;
 
   RDMA_STATE state = INIT;
 #endif  // defined(__linux__)

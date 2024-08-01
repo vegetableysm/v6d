@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "common/rdma/rdma_server.h"
 #include "common/rdma/util.h"
@@ -50,6 +51,8 @@ Status RDMAServer::Make(std::shared_ptr<RDMAServer>& ptr, int port) {
   hints->fabric_attr = new fi_fabric_attr;
   memset(hints->fabric_attr, 0, sizeof *(hints->fabric_attr));
   hints->fabric_attr->prov_name = strdup("verbs");
+  hints->rx_attr->size = 2000; //std::thread::hardware_concurrency();
+  hints->tx_attr->size = 2000; //std::thread::hardware_concurrency();
 
   return Make(ptr, hints, port);
 }
@@ -95,16 +98,19 @@ Status RDMAServer::Make(std::shared_ptr<RDMAServer>& ptr, fi_info* hints,
   CHECK_ERROR(!fi_cq_open(ptr->domain, &ptr->cq_attr, &ptr->txcq, NULL),
               "fi_cq_open failed.");
 
-  ptr->rx_msg_buffer = new char[ptr->rx_msg_size];
+  ptr->rx_msg_buffer = new char[ptr->fi->rx_attr->size * sizeof(VineyardMsg)];
+  ptr->rx_msg_buffer_size = ptr->fi->rx_attr->size * sizeof(VineyardMsg);
   if (!ptr->rx_msg_buffer) {
     return Status::Invalid("Failed to allocate rx buffer.");
   }
-  ptr->tx_msg_buffer = new char[ptr->rx_msg_size];
+  ptr->tx_msg_buffer = new char[ptr->fi->tx_attr->size * sizeof(VineyardMsg)];
+  ptr->tx_msg_buffer_size = ptr->fi->tx_attr->size * sizeof(VineyardMsg);
+  std::cout << "msg size:" << ptr->fi->tx_attr->size << " " << ptr->fi->rx_attr->size << std::endl;
   if (!ptr->tx_msg_buffer) {
     return Status::Invalid("Failed to allocate tx buffer.");
   }
 
-  int bits = ptr->rx_msg_size / sizeof(VineyardMsg);
+  int bits = ptr->rx_msg_buffer_size / sizeof(VineyardMsg);
   ptr->rx_bitmap_num = ptr->tx_bitmap_num = (bits + 63) / 64;
   ptr->rx_buffer_bitmaps = new uint64_t[ptr->rx_bitmap_num];
   if (!ptr->rx_buffer_bitmaps) {
@@ -119,9 +125,9 @@ Status RDMAServer::Make(std::shared_ptr<RDMAServer>& ptr, fi_info* hints,
   memset(ptr->tx_buffer_bitmaps, UINT8_MAX,
          ptr->tx_bitmap_num * sizeof(uint64_t));
 
-  ptr->RegisterMemory(&(ptr->rx_mr), ptr->rx_msg_buffer, ptr->rx_msg_size,
+  ptr->RegisterMemory(&(ptr->rx_mr), ptr->rx_msg_buffer, ptr->rx_msg_buffer_size,
                       ptr->rx_msg_key, ptr->rx_msg_mr_desc);
-  ptr->RegisterMemory(&(ptr->tx_mr), ptr->tx_msg_buffer, ptr->tx_msg_size,
+  ptr->RegisterMemory(&(ptr->tx_mr), ptr->tx_msg_buffer, ptr->tx_msg_buffer_size,
                       ptr->tx_msg_key, ptr->tx_msg_mr_desc);
 
   ptr->port = port;
@@ -338,9 +344,10 @@ Status RDMAServer::GetTXFreeMsgBuffer(void*& buffer) {
   }
   while (true) {
     std::lock_guard<std::mutex> lock(tx_msg_buffer_mutex_);
-    int index = FindEmptySlot(tx_buffer_bitmaps, tx_bitmap_num);
+    int index = FindEmptySlot(tx_buffer_bitmaps, tx_bitmap_num, tx_msg_buffer_size / sizeof(VineyardMsg));
     if (index == -1) {
       usleep(1000);
+      std::cout << "get tx retry" << std::endl;
       continue;
     }
     buffer = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(tx_msg_buffer) +
@@ -355,9 +362,10 @@ Status RDMAServer::GetRXFreeMsgBuffer(void*& buffer) {
   }
   while (true) {
     std::lock_guard<std::mutex> lock(rx_msg_buffer_mutex_);
-    int index = FindEmptySlot(rx_buffer_bitmaps, rx_bitmap_num);
+    int index = FindEmptySlot(rx_buffer_bitmaps, rx_bitmap_num, rx_msg_buffer_size / sizeof(VineyardMsg));
     if (index == -1) {
       usleep(1000);
+      std::cout << "get rx retry" << std::endl;
       continue;
     }
     buffer = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(rx_msg_buffer) +
@@ -371,7 +379,7 @@ Status RDMAServer::ReleaseRXBuffer(void* buffer) {
     return Status::Invalid("Server is stoped.");
   }
   if ((uint64_t) buffer < (uint64_t) rx_msg_buffer ||
-      (uint64_t) buffer >= (uint64_t) rx_msg_buffer + (uint64_t) rx_msg_size) {
+      (uint64_t) buffer >= (uint64_t) rx_msg_buffer + (uint64_t) tx_msg_buffer_size) {
     return Status::Invalid("Invalid buffer address.");
   }
   if (((uint64_t) buffer - (uint64_t) rx_msg_buffer) % sizeof(VineyardMsg) !=
@@ -390,7 +398,7 @@ Status RDMAServer::ReleaseTXBuffer(void* buffer) {
     return Status::Invalid("Server is stoped.");
   }
   if ((uint64_t) buffer < (uint64_t) tx_msg_buffer ||
-      (uint64_t) buffer >= (uint64_t) tx_msg_buffer + (uint64_t) tx_msg_size) {
+      (uint64_t) buffer >= (uint64_t) tx_msg_buffer + (uint64_t) tx_msg_buffer_size) {
     return Status::Invalid("Invalid buffer address.");
   }
   if (((uint64_t) buffer - (uint64_t) tx_msg_buffer) % sizeof(VineyardMsg) !=

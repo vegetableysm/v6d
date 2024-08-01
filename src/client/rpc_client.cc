@@ -44,6 +44,16 @@ RPCClient::~RPCClient() {
     std::cout << "Failed to stop RDMA client: " << status.ToString()
               << ". May cause resource leak." << std::endl;
   }
+  status = rdma_client_->Close();
+  if (!status.ok()) {
+    std::cout << "Failed to close RDMA client: " << status.ToString()
+              << ". May cause resource leak." << std::endl;
+  }
+  status = RDMAClientCreator::Release(rdma_endpoint_);
+  if (!status.ok()) {
+    std::cout << "Failed to release RDMA client: " << status.ToString()
+              << ". May cause resource leak." << std::endl;
+  }
   Disconnect();
 }
 
@@ -204,8 +214,10 @@ Status RPCClient::ConnectRDMA(const std::string& rdma_host,
     return Status::OK();
   }
 
-  RETURN_ON_ERROR(RDMAClientCreator::Create(this->rdma_client_, rdma_host,
-                                            static_cast<int>(rdma_port)));
+  if (!rdma_client_) {
+    RETURN_ON_ERROR(RDMAClientCreator::Create(this->rdma_client_, rdma_host,
+                                              static_cast<int>(rdma_port)));
+  }
 
   int retry = 0;
   do {
@@ -227,20 +239,37 @@ Status RPCClient::ConnectRDMA(const std::string& rdma_host,
 Status RPCClient::RDMARequestMemInfo(RegisterMemInfo& remote_info) {
   void* buffer;
   RETURN_ON_ERROR(this->rdma_client_->GetTXFreeMsgBuffer(buffer));
+  memset(buffer, 0, sizeof(VineyardMsg));
   VineyardMsg* msg = reinterpret_cast<VineyardMsg*>(buffer);
   msg->type = VINEYARD_MSG_REQUEST_MEM;
   msg->remoteMemInfo.remote_address = (uint64_t) remote_info.address;
   msg->remoteMemInfo.len = remote_info.size;
   void* remoteMsg;
   RETURN_ON_ERROR(this->rdma_client_->GetRXFreeMsgBuffer(remoteMsg));
-  memset(remoteMsg, 0, 64);
+  memset(remoteMsg, 0, sizeof(VineyardMsg));
+
   VINEYARD_CHECK_OK(
       this->rdma_client_->Recv(remoteMsg, sizeof(VineyardMsg), nullptr));
   RETURN_ON_ERROR(
       this->rdma_client_->Send(buffer, sizeof(VineyardMsg), nullptr));
-  VINEYARD_CHECK_OK(rdma_client_->GetTXCompletion(-1, nullptr));
 
+  auto start_ = std::chrono::high_resolution_clock::now();
+  VINEYARD_CHECK_OK(rdma_client_->GetTXCompletion(-1, nullptr));
+  auto end_ = std::chrono::high_resolution_clock::now();
+  auto duration_ =
+      std::chrono::duration_cast<std::chrono::microseconds>(end_ - start_);
+  if (duration_.count() > 1000) {
+    std::cout << "Get tx use: " << duration_.count() << "us" << std::endl;
+  }
+  auto start__ = std::chrono::high_resolution_clock::now();
   VINEYARD_CHECK_OK(rdma_client_->GetRXCompletion(-1, nullptr));
+  auto end__ = std::chrono::high_resolution_clock::now();
+  auto duration__ =
+      std::chrono::duration_cast<std::chrono::microseconds>(end__ - start__);
+  if (duration__.count() > 1000) {
+    std::cout << "Get rx use: " << duration__.count() << "us" << std::endl;
+  }
+
 
   VineyardMsg* vmsg = reinterpret_cast<VineyardMsg*>(remoteMsg);
   if (vmsg->type == VINEYARD_MSG_REQUEST_MEM) {
@@ -284,8 +313,6 @@ Status RPCClient::StopRDMA() {
   RETURN_ON_ERROR(rdma_client_->GetTXCompletion(-1, nullptr));
 
   RETURN_ON_ERROR(rdma_client_->Stop());
-  RETURN_ON_ERROR(rdma_client_->Close());
-  RETURN_ON_ERROR(RDMAClientCreator::Release(rdma_endpoint_));
 
   return Status::OK();
 }
@@ -735,6 +762,54 @@ Status RPCClient::TransferRemoteBlobWithRDMA(std::shared_ptr<Buffer> buffer,
   return Status::OK();
 }
 
+Status RPCClient::TransferRemoteBlobWithCachedRDMABuffer(
+    std::shared_ptr<RDMAFixedCachedBuffer> buffer, const Payload& payload,
+    RDMAClient::rdma_opt_t rdma_opt) {
+  size_t remain_blob_bytes = buffer->size();
+  char* local_blob_data = reinterpret_cast<char*>(buffer->mutable_data());
+
+  do {
+    size_t blob_data_offset = buffer->size() - remain_blob_bytes;
+    void* remote_blob_data = payload.pointer;
+    size_t transfer_bytes = 0;
+
+    // Request mem info
+    RegisterMemInfo remote_info;
+    while (true) {
+      remote_info.address =
+          reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset;
+      remote_info.size = buffer->info_.size;
+      RETURN_ON_ERROR(RDMARequestMemInfo(remote_info));
+      if (remote_info.size > 0) {
+        break;
+      }
+      // Maybe the registered size is too large. There is no enough
+      // memory to register on server. Wait for next time.
+      usleep(1000);
+    }
+    transfer_bytes = remote_info.size;
+
+    // Write data
+    size_t remain_bytes = transfer_bytes;
+    while (remain_bytes > 0) {
+      size_t read_bytes =
+          std::min(remain_bytes, rdma_client_->GetMaxTransferBytes());
+      size_t read_data_offset = transfer_bytes - remain_bytes;
+      RETURN_ON_ERROR(rdma_opt(
+          local_blob_data + blob_data_offset + read_data_offset, read_bytes,
+          reinterpret_cast<uint64_t>(remote_blob_data) + blob_data_offset +
+              read_data_offset,
+          remote_info.rkey, buffer->info_.mr_desc, nullptr));
+      RETURN_ON_ERROR(rdma_client_->GetTXCompletion(-1, nullptr));
+      remain_bytes -= read_bytes;
+    }
+
+    remain_blob_bytes -= transfer_bytes;
+    RETURN_ON_ERROR(RDMAReleaseMemInfo(remote_info));
+  } while (remain_blob_bytes > 0);
+  return Status::OK();
+}
+
 Status RPCClient::GetRemoteBlob(const ObjectID& id, const bool unsafe,
                                 std::shared_ptr<RemoteBlob>& buffer) {
   ENSURE_CONNECTED(this);
@@ -790,8 +865,9 @@ Status RPCClient::GetRemoteBlob(const ObjectID& id, const bool unsafe,
   return Status::OK();
 }
 
-Status RPCClient::GetRemoteBlob(const ObjectID& id, const bool unsafe,
-                                std::shared_ptr<MutableBuffer>& buffer) {
+Status RPCClient::GetRemoteBlob(
+    const ObjectID& id, const bool unsafe,
+    std::shared_ptr<RDMAFixedCachedBuffer>& buffer) {
   ENSURE_CONNECTED(this);
   std::shared_ptr<Decompressor> decompressor;
   if (compression_enabled()) {
@@ -824,7 +900,7 @@ Status RPCClient::GetRemoteBlob(const ObjectID& id, const bool unsafe,
         &RDMAClient::Read, rdma_client_, std::placeholders::_1,
         std::placeholders::_2, std::placeholders::_3, std::placeholders::_4,
         std::placeholders::_5, std::placeholders::_6);
-    RETURN_ON_ERROR(TransferRemoteBlobWithRDMA(buffer, payloads[0], opt_func));
+    RETURN_ON_ERROR(TransferRemoteBlobWithCachedRDMABuffer(buffer, payloads[0], opt_func));
   } else {
     if (decompressor && payloads[0].data_size > 0) {
       RETURN_ON_ERROR(detail::recv_and_decompress(
@@ -931,7 +1007,7 @@ Status RPCClient::GetRemoteBlobs(
 
 Status RPCClient::GetRemoteBlobs(
     std::vector<ObjectID> const& ids, const bool unsafe,
-    std::vector<std::shared_ptr<MutableBuffer>>& buffers) {
+    std::vector<std::shared_ptr<RDMAFixedCachedBuffer>>& buffers) {
   ENSURE_CONNECTED(this);
   std::shared_ptr<Decompressor> decompressor;
   if (compression_enabled()) {
@@ -958,7 +1034,8 @@ Status RPCClient::GetRemoteBlobs(
                        std::to_string(payloads.size()) + " vs. " +
                        std::to_string(id_set.size()));
 
-  std::unordered_map<ObjectID, std::shared_ptr<MutableBuffer>> id_payload_map;
+  std::unordered_map<ObjectID, std::shared_ptr<RDMAFixedCachedBuffer>>
+      id_payload_map;
   for (size_t i = 0; i < ids.size(); i++) {
     id_payload_map[ids[i]] = buffers[i];
   }
@@ -967,13 +1044,12 @@ Status RPCClient::GetRemoteBlobs(
       if (payload.data_size == 0) {
         continue;
       }
-      auto remote_blob = id_payload_map[payload.object_id];
       RDMAClient::rdma_opt_t opt_func = std::bind(
           &RDMAClient::Read, rdma_client_, std::placeholders::_1,
           std::placeholders::_2, std::placeholders::_3, std::placeholders::_4,
           std::placeholders::_5, std::placeholders::_6);
       RETURN_ON_ERROR(
-          TransferRemoteBlobWithRDMA(remote_blob, payload, opt_func));
+          TransferRemoteBlobWithCachedRDMABuffer(id_payload_map[payload.object_id], payload, opt_func));
     }
   } else {
     for (auto const& payload : payloads) {
@@ -1017,6 +1093,15 @@ Status RPCClient::doReleaseBlobsWithRDMARequest(
   RETURN_ON_ERROR(doRead(message_in));
   RETURN_ON_ERROR(ReadReleaseBlobsWithRDMAReply(message_in));
   return Status::OK();
+}
+
+Status RPCClient::MakeRDMAFixedCachedBuffer(
+    size_t size, std::shared_ptr<RDMAFixedCachedBuffer>& buffer) {
+  if (!this->connected_) {
+    return Status::ConnectionError("Not connected to vineyard server.");
+  }
+  auto self = shared_from_this();
+  return RDMAFixedCachedBuffer::Make(self, size, buffer);
 }
 
 }  // namespace vineyard

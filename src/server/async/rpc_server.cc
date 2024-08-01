@@ -234,6 +234,7 @@ void RPCServer::doVineyardRequestMemory(VineyardRecvContext* recv_context,
       break;
     }
   }
+  
   if (!status.ok() || remote_request_mem_info.size == 0) {
     LOG(ERROR) << "Failed to register mem.";
     void* msg = nullptr;
@@ -280,8 +281,10 @@ void RPCServer::doVineyardRequestMemory(VineyardRecvContext* recv_context,
     remote_mem_infos_[recv_context->rdma_conn_id].insert(std::make_pair(
         remote_request_mem_info.mr_desc, remote_request_mem_info));
   }
+  
   rdma_server_->Send(recv_context->rdma_conn_id, msg, sizeof(VineyardMsg),
                      send_context);
+  
   VLOG(100) << "Send key:" << remote_request_mem_info.rkey << " send address:"
             << reinterpret_cast<void*>(remote_request_mem_info.address)
             << " size: " << remote_request_mem_info.size;
@@ -356,9 +359,18 @@ void RPCServer::doPrepareRecv(uint64_t rdma_conn_id) {
 }
 
 void RPCServer::doRDMARecv() {
+  auto start = std::chrono::high_resolution_clock::now();
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   while (1) {
     void* context = nullptr;
+    end = std::chrono::high_resolution_clock::now();
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    if (duration.count() > 1000) {
+      LOG(INFO) << "RDMA do recv cost: " << duration.count() << "us";
+    }
     Status status = rdma_server_->GetRXCompletion(-1, &context);
+    start = std::chrono::high_resolution_clock::now();
     if (!status.ok()) {
       if (rdma_server_->IsStopped()) {
         VLOG(100) << "RDMA server stopped!";
