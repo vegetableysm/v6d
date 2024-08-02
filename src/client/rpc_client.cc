@@ -248,27 +248,27 @@ Status RPCClient::RDMARequestMemInfo(RegisterMemInfo& remote_info) {
   RETURN_ON_ERROR(this->rdma_client_->GetRXFreeMsgBuffer(remoteMsg));
   memset(remoteMsg, 0, sizeof(VineyardMsg));
 
-  auto start_ = std::chrono::high_resolution_clock::now();
+  // auto start_ = std::chrono::high_resolution_clock::now();
   RETURN_ON_ERROR(
       this->rdma_client_->Send(buffer, sizeof(VineyardMsg), nullptr));
 
   VINEYARD_CHECK_OK(rdma_client_->GetTXCompletion(-1, nullptr));
-  auto end_ = std::chrono::high_resolution_clock::now();
-  auto duration_ =
-      std::chrono::duration_cast<std::chrono::microseconds>(end_ - start_);
-  if (duration_.count() > 1000) {
-    std::cout << "Get tx use: " << duration_.count() << "us" << std::endl;
-  }
+  // auto end_ = std::chrono::high_resolution_clock::now();
+  // auto duration_ =
+  //     std::chrono::duration_cast<std::chrono::microseconds>(end_ - start_);
+  // if (duration_.count() > 1000) {
+  //   std::cout << "Get tx use: " << duration_.count() << "us" << std::endl;
+  // }
   VINEYARD_CHECK_OK(
       this->rdma_client_->Recv(remoteMsg, sizeof(VineyardMsg), nullptr));
-  auto start__ = std::chrono::high_resolution_clock::now();
+  // auto start__ = std::chrono::high_resolution_clock::now();
   VINEYARD_CHECK_OK(rdma_client_->GetRXCompletion(-1, nullptr));
-  auto end__ = std::chrono::high_resolution_clock::now();
-  auto duration__ =
-      std::chrono::duration_cast<std::chrono::microseconds>(end__ - start__);
-  if (duration__.count() > 1000) {
-    std::cout << "Get rx use: " << duration__.count() << "us" << std::endl;
-  }
+  // auto end__ = std::chrono::high_resolution_clock::now();
+  // auto duration__ =
+  //     std::chrono::duration_cast<std::chrono::microseconds>(end__ - start__);
+  // if (duration__.count() > 1000) {
+  //   std::cout << "Get rx use: " << duration__.count() << "us" << std::endl;
+  // }
 
 
   VineyardMsg* vmsg = reinterpret_cast<VineyardMsg*>(remoteMsg);
