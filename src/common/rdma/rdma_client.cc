@@ -157,14 +157,14 @@ Status RDMAClient::SendMemInfoToServer(void* buffer, uint64_t size) {
 }
 
 Status RDMAClient::GetTXFreeMsgBuffer(void*& buffer) {
-  buffer = tx_msg_buffer + (tx_index % 6000) * sizeof(VineyardMsg);
-  tx_index++;
+  buffer = tx_msg_buffer;// + (tx_index % 512) * sizeof(VineyardMsg);
+  // tx_index++;
   return Status::OK();
 }
 
 Status RDMAClient::GetRXFreeMsgBuffer(void*& buffer) {
-  buffer = rx_msg_buffer + (rx_index % 6000) * sizeof(VineyardMsg);
-  rx_index++;
+  buffer = rx_msg_buffer;// + (rx_index % 6000) * sizeof(VineyardMsg);
+  // rx_index++;
   return Status::OK();
 }
 
@@ -317,8 +317,8 @@ Status RDMAClientCreator::CreateRDMARemoteNodeInfo(RDMARemoteNodeInfo& info,
   hints->fabric_attr = new fi_fabric_attr;
   memset(hints->fabric_attr, 0, sizeof *(hints->fabric_attr));
   hints->fabric_attr->prov_name = strdup("verbs");
-  hints->tx_attr->size = 6000;  // receive buffer size
-  hints->rx_attr->size = 6000;  // transmit buffer size
+  // hints->tx_attr->size = 1;  // receive buffer size
+  // hints->rx_attr->size = 1;  // transmit buffer size
 
   RETURN_ON_ERROR(CreateRDMARemoteNodeInfo(info, hints, server_address, port));
   IRDMA::FreeInfo(hints);

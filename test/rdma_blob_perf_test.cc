@@ -222,30 +222,30 @@ int main(int argc, const char** argv) {
   LOG(INFO) << "----------------------------";
   int index = 0;
   for (auto& blob_ids_list : blob_ids_lists) {
-    std::vector<std::vector<std::shared_ptr<RemoteBlob>>> local_buffers_list;
-    std::vector<std::thread> threads;
-    local_buffers_list.resize(parallel);
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < parallel; i++) {
-      threads.push_back(std::thread(TestGetBlob, std::ref(clients[i]),
-                                    std::ref(blob_ids_list[i]), sizes[index],
-                                    std::ref(local_buffers_list[i])));
-    }
-    for (int i = 0; i < parallel; i++) {
-      threads[i].join();
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    int iterator = total_mem / sizes[index];
-    LOG(INFO) << "Total time:" << duration.count() << "ms"
-              << " average speed:"
-              << static_cast<double>(iterator * sizes[index] * parallel) /
-                     1024 / 1024 /
-                     (static_cast<double>(duration.count()) / 1000)
-              << "MB/s\n";
-    local_buffers_lists.push_back(local_buffers_list);
-    index++;
+    // std::vector<std::vector<std::shared_ptr<RemoteBlob>>> local_buffers_list;
+    // std::vector<std::thread> threads;
+    // local_buffers_list.resize(parallel);
+    // auto start = std::chrono::high_resolution_clock::now();
+    // for (int i = 0; i < parallel; i++) {
+    //   threads.push_back(std::thread(TestGetBlob, std::ref(clients[i]),
+    //                                 std::ref(blob_ids_list[i]), sizes[index],
+    //                                 std::ref(local_buffers_list[i])));
+    // }
+    // for (int i = 0; i < parallel; i++) {
+    //   threads[i].join();
+    // }
+    // auto end = std::chrono::high_resolution_clock::now();
+    // auto duration =
+    //     std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    // int iterator = total_mem / sizes[index];
+    // LOG(INFO) << "Total time:" << duration.count() << "ms"
+    //           << " average speed:"
+    //           << static_cast<double>(iterator * sizes[index] * parallel) /
+    //                  1024 / 1024 /
+    //                  (static_cast<double>(duration.count()) / 1000)
+    //           << "MB/s\n";
+    // local_buffers_lists.push_back(local_buffers_list);
+    // index++;
   }
 
   // for (auto& local_buffers_list : local_buffers_lists) {
@@ -261,9 +261,6 @@ int main(int argc, const char** argv) {
   std::vector<std::vector<std::vector<std::shared_ptr<RDMAFixedCachedBuffer>>>>
       local_buffers_lists_3;
   for (auto& blob_ids_list : blob_ids_lists) {
-    std::shared_ptr<RDMAFixedCachedBuffer> cached_buffer;
-    VINEYARD_CHECK_OK(clients[index]->MakeRDMAFixedCachedBuffer(
-                sizes[index], cached_buffer));
     std::vector<std::vector<std::shared_ptr<RDMAFixedCachedBuffer>>>
         local_buffers_list;
     std::vector<std::thread> threads;
@@ -271,6 +268,9 @@ int main(int argc, const char** argv) {
     for (int i = 0; i < parallel; i++) {
       local_buffers_list[i].resize(total_mem / sizes[index]);
       for (size_t j = 0; j < total_mem / sizes[index]; j++) {
+        std::shared_ptr<RDMAFixedCachedBuffer> cached_buffer;
+        VINEYARD_CHECK_OK(clients[index]->MakeRDMAFixedCachedBuffer(
+                    sizes[index], cached_buffer));
         local_buffers_list[i][j] = cached_buffer;
       }
     }

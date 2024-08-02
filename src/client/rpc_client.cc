@@ -248,10 +248,10 @@ Status RPCClient::RDMARequestMemInfo(RegisterMemInfo& remote_info) {
   RETURN_ON_ERROR(this->rdma_client_->GetRXFreeMsgBuffer(remoteMsg));
   memset(remoteMsg, 0, sizeof(VineyardMsg));
 
+  auto start_ = std::chrono::high_resolution_clock::now();
   RETURN_ON_ERROR(
       this->rdma_client_->Send(buffer, sizeof(VineyardMsg), nullptr));
 
-  auto start_ = std::chrono::high_resolution_clock::now();
   VINEYARD_CHECK_OK(rdma_client_->GetTXCompletion(-1, nullptr));
   auto end_ = std::chrono::high_resolution_clock::now();
   auto duration_ =
